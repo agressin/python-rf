@@ -277,8 +277,7 @@ class FeatureFunction:
 
 		w = self.width //2
 		h = self.height //2
-		#types=["one","diff","sum","ratio"]
-		types=["one"]
+		types=["one","diff","sum","ratio"]
 
 		if(self.random_weight == None):
 
