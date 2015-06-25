@@ -16,12 +16,13 @@ from .Splitter import SplitRecord
 class Node:
 	"""Class Node"""
 
-	def __init__(self, parent, is_left, impurity,n_node_samples):
+	def __init__(self, parent, is_left, impurity,n_node_samples,stats):
 		""" init """
 		self.parent = parent
 		self.is_left = is_left
 		self.impurity = impurity
 		self.n_node_samples = n_node_samples
+		self.stats = deepcopy(stats)
 	
 	def isLeaf(self):
 		"""isLeaf function"""
@@ -34,9 +35,9 @@ class Split(Node):
 	"""Class Splitv"""
 	 
 	def __init__(self,parent, is_left, feature, threshold, impurity,
-					n_node_samples, improvement):
+					n_node_samples, improvement, stats):
 		""" init """
-		Node.__init__(self, parent, is_left, impurity,n_node_samples)
+		Node.__init__(self, parent, is_left, impurity, n_node_samples, stats)
 		self.feature = feature
 		self.threshold = threshold
 		self.childs=[-1,-1]
@@ -60,8 +61,8 @@ class Leaf(Node):
 	 
 	def __init__(self,parent, is_left, impurity, n_node_samples, stats):
 		""" init """
-		Node.__init__(self, parent, is_left, impurity,n_node_samples)
-		self.stats= deepcopy(stats)
+		Node.__init__(self, parent, is_left, impurity,n_node_samples, stats)
+		#self.stats = deepcopy(stats)
 
 	def isLeaf(self):
 		"""isLeaf function"""
@@ -216,7 +217,7 @@ class Tree:
 			self.nodes.append(l)
 		else:
 			s = Split(parent, is_left, feature, threshold, impurity,
-						n_node_samples, improvement)
+						n_node_samples, improvement, stats)
 			self.nodes.append(s)
 
 		node_id=len(self.nodes)-1
@@ -486,6 +487,19 @@ class Tree:
 				#improvement = node.impurity - self.nodes[idLeft].impurity - self.nodes[idRight].impurity
 				improvement = node.improvement
 				node.feature.addFeatureImportance(improvement, acc)
+		
+		return acc
+
+	def getFeatureImportanceByClass(self, acc = None):
+		if(acc == None):
+			acc = self.featureFunction.getEmptyAccumulatorByClass()
+		for node in self.nodes:
+			if not node.isLeaf():
+				#idLeft, idRight = node.childs
+				#improvement = node.impurity - self.nodes[idLeft].impurity - self.nodes[idRight].impurity
+				improvement = node.improvement
+				stats = numpy.asarray(node.stats)
+				node.feature.addFeatureImportanceByClass(improvement, stats, acc)
 		
 		return acc
 

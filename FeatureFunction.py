@@ -385,17 +385,17 @@ class FeatureFunction:
 			}
 		self.option = option
 
-	def getEmptyAccumulator(self):
+	def getEmptyAccumulator(self,nbClasses):
 		acc = {}
 		#if self.option['type'] == 'RQE':
 		acc['type'] = 'RQE'
 		req = {}
-		req['type'] = numpy.zeros(4)
-		req['channel'] = numpy.zeros(self.nb_channels)
-		req['windows_width'] = numpy.zeros(self.width)
-		req['windows_height'] = numpy.zeros(self.height)
+		req['type'] = numpy.zeros((4,nbClasses))
+		req['channel'] = numpy.zeros((self.nb_channels,nbClasses))
+		req['windows_width'] = numpy.zeros((self.width,nbClasses))
+		req['windows_height'] = numpy.zeros((self.height,nbClasses))
 		dMax = int(math.ceil(math.sqrt(math.pow(self.width,2) + math.pow(self.height,2))))
-		req['windows_dist'] = numpy.zeros(dMax)
+		req['windows_dist'] = numpy.zeros((dMax,nbClasses))
 		acc['RQE'] = req
 
 		return acc
@@ -444,6 +444,51 @@ class FeatureFunction:
 				acc['RQE']['windows_dist'][d] += improvement/2
 				d = int(math.floor(math.sqrt(math.pow(xM2+xm2,2) + math.pow(yM2+ym2,2))))
 				acc['RQE']['windows_dist'][d] += improvement/2
+
+	def addFeatureImportanceByClass(self, improvement, stats, acc):
+
+		if self.option['type'] == 'RQE':
+			param = self.option['RQE']
+			w = param['windows'][0]
+			c1 = w['Channel']
+			xm1 = w['Xmin']
+			xM1 = w['Xmax']
+			ym1 = w['Ymin']
+			yM1 = w['Ymax']
+			
+			type = 0
+			if param['type'] == 'sum':
+				type = 1
+			elif  param['type'] == 'diff':
+				type = 2
+			elif  param['type'] == 'ratio':
+				type = 3
+
+			acc['RQE']['type'][type,:] += improvement*stats
+	
+			if type == 0:
+				acc['RQE']['channel'][c1,:] += improvement*stats
+				acc['RQE']['windows_width'][xM1-xm1,:] += improvement*stats
+				acc['RQE']['windows_height'][yM1-ym1,:] += improvement*stats
+				d = int(math.floor(math.sqrt(math.pow(xM1+xm1,2) + math.pow(yM1+ym1,2))))
+				acc['RQE']['windows_dist'][d,:] += improvement*stats
+			else:
+				w = param['windows'][1]
+				c2 = w['Channel']
+				xm2 = w['Xmin']
+				xM2 = w['Xmax']
+				ym2 = w['Ymin']
+				yM2 = w['Ymax']
+				acc['RQE']['channel'][c1,:] += improvement/2*stats
+				acc['RQE']['channel'][c2,:] += improvement/2*stats
+				acc['RQE']['windows_width'][xM1-xm1,:] += improvement/2*stats
+				acc['RQE']['windows_width'][xM2-xm2,:] += improvement/2*stats
+				acc['RQE']['windows_height'][yM2-ym2,:] += improvement/2*stats
+				acc['RQE']['windows_height'][yM2-ym2,:] += improvement/2*stats
+				d = int(math.floor(math.sqrt(math.pow(xM1+xm1,2) + math.pow(yM1+ym1,2))))
+				acc['RQE']['windows_dist'][d,:] += improvement/2*stats
+				d = int(math.floor(math.sqrt(math.pow(xM2+xm2,2) + math.pow(yM2+ym2,2))))
+				acc['RQE']['windows_dist'][d,:] += improvement/2*stats
 
 	def __repr__(self):
 		return "FeatureFunction " + str(self.nb_channels) + " " +str(self.width) + " " +str(self.height) + " " + self.option.__repr__()
