@@ -368,14 +368,12 @@ class FeatureFunction:
 				Ymax2 = h-1
 				Ymin2 = Ymax2 - h2
 
-		option={ 'type' : 'RQE', 'RQE' : { 'type' :  t,
+			option={ 'type' : 'RQE', 'RQE' : { 'type' :  t,
 					'windows' : [
 						{ 'Xmin' : Xmin1,'Ymin' : Ymin1,'Xmax' : Xmax1,'Ymax' : Ymax1,'Channel' : Channel1},
 						{ 'Xmin' : Xmin2,'Ymin' : Ymin2,'Xmax' : Xmax2,'Ymax' : Ymax2,'Channel' : Channel2},
-					]
-				}
-			}
-		self.option = option
+					] } }
+			self.option = option
 
 		else:
 			t= random.choice(types)
