@@ -309,7 +309,7 @@ class myRandomForestClassifier():
 
 	def getFeatureImportanceByClass(self):
 
-		acc = self.featureFunction.getEmptyAccumulatorByClass();
+		acc = self.featureFunction.getEmptyAccumulatorByClass(self.n_classes);
 		for e in self.estimators_:
 			e.getFeatureImportanceByClass(acc)
 		
