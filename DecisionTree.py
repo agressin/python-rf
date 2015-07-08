@@ -110,5 +110,8 @@ class myDecisionTreeClassifier:
 	def getFeatureImportance(self, acc = None):
 		return self.tree.getFeatureImportance(acc)
 
+	def getFeatureImportanceByClass(self, acc = None):
+		return self.tree.getFeatureImportanceByClass(acc)
+
 	def __repr__(self):
 		return "DecisionTree, tree : \r\n"+self.tree.__repr__()

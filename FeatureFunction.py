@@ -21,12 +21,13 @@ class FeatureFunction:
 		- height
 	"""
  
-	def __init__(self, nb_channels = 0, width = 0, height =0, option = {}, random_weight=None):
+	def __init__(self, nb_channels = 0, width = 0, height =0, option = {}, random_weight=None, random_weight_per_class=None):
 		self.nb_channels = nb_channels
 		self.width	 = (width//2)  * 2
 		self.height  = (height//2) * 2
 		self.option	 = option
 		self.random_weight = random_weight
+		self.random_weight_per_class = random_weight_per_class
 
 	def init(self, nb_channels,width,height):
 		self.nb_channels = nb_channels
@@ -273,31 +274,22 @@ class FeatureFunction:
 		b = memoryview(numpy.int32(yM2)); 			cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
 		assert(shift == f_size)
 
-	def random(self):
+	def random(self, stats=None):
 
 		w = self.width //2
 		h = self.height //2
 		types=["one","diff","sum","ratio"]
-
-		if(self.random_weight == None):
-
-			t= random.choice(types)
-
-			Xmin1 = random.randint(-w,w-2)
-			Ymin1 = random.randint(-h,h-2)
-			Xmax1 = random.randint(Xmin1+1, w-1)
-			Ymax1 = random.randint(Ymin1+1, h-1)
-			Channel1 = random.randint(0,self.nb_channels-1)
-
-			Xmin2 = random.randint(-w,w-2)
-			Ymin2 = random.randint(-h,h-2)
-			Xmax2 = random.randint(Xmin2+1, w-1)
-			Ymax2 = random.randint(Ymin2+1, h-1)
-			Channel2 = random.randint(0,self.nb_channels-1)
-
-		else:
-
+		isDefault = true
+		
+		if( (self.random_weight_per_class != None) and (stats != None) ):
+			#TODO
+			acc = self.random_weight_per_class * stats
+			isDefault = false
+		elif( self.random_weight != None):
 			acc = self.random_weight
+			isDefault = false
+
+		if (not isDefault):
 			weights = acc['RQE']['type']
 			cumdist = list(itertools.accumulate(weights))
 			x = random.random() * cumdist[-1]
@@ -385,7 +377,37 @@ class FeatureFunction:
 			}
 		self.option = option
 
-	def getEmptyAccumulator(self,nbClasses):
+		else:
+			t= random.choice(types)
+
+			Xmin1 = random.randint(-w,w-2)
+			Ymin1 = random.randint(-h,h-2)
+			Xmax1 = random.randint(Xmin1+1, w-1)
+			Ymax1 = random.randint(Ymin1+1, h-1)
+			Channel1 = random.randint(0,self.nb_channels-1)
+
+			Xmin2 = random.randint(-w,w-2)
+			Ymin2 = random.randint(-h,h-2)
+			Xmax2 = random.randint(Xmin2+1, w-1)
+			Ymax2 = random.randint(Ymin2+1, h-1)
+			Channel2 = random.randint(0,self.nb_channels-1)
+
+	def getEmptyAccumulator(self):
+		acc = {}
+		#if self.option['type'] == 'RQE':
+		acc['type'] = 'RQE'
+		req = {}
+		req['type'] = numpy.zeros(4)
+		req['channel'] = numpy.zeros(self.nb_channels)
+		req['windows_width'] = numpy.zeros(self.width)
+		req['windows_height'] = numpy.zeros(self.height)
+		dMax = int(math.ceil(math.sqrt(math.pow(self.width,2) + math.pow(self.height,2))))
+		req['windows_dist'] = numpy.zeros(dMax)
+		acc['RQE'] = req
+
+		return acc		
+
+	def getEmptyAccumulatorByClass(self,nbClasses):
 		acc = {}
 		#if self.option['type'] == 'RQE':
 		acc['type'] = 'RQE'

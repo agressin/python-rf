@@ -307,6 +307,14 @@ class myRandomForestClassifier():
 		
 		return acc
 
+	def getFeatureImportanceByClass(self):
+
+		acc = self.featureFunction.getEmptyAccumulatorByClass();
+		for e in self.estimators_:
+			e.getFeatureImportanceByClass(acc)
+		
+		return acc		
+
 	def __repr__(self):
 		out = "RandomForest : \r\n"
 		for t in self.estimators_:
