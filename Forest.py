@@ -7,11 +7,13 @@ from joblib import Parallel, delayed
 import pickle
 import random
 
-import pycuda.autoinit
-import pycuda.gpuarray as gpuarray
-import pycuda.driver as cuda
-from pycuda.compiler import SourceModule
-
+try:
+	import pycuda.autoinit
+	import pycuda.gpuarray as gpuarray
+	import pycuda.driver as cuda
+	from pycuda.compiler import SourceModule
+except ImportError:
+    pass
 
 from .FeatureFunction import FeatureFunction
 from .DecisionTree import myDecisionTreeClassifier

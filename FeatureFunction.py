@@ -4,11 +4,15 @@ import math
 import itertools
 import bisect
 
-from string import Template
-import pycuda.autoinit
-import pycuda.gpuarray as gpuarray
-import pycuda.driver as cuda
-from pycuda.compiler import SourceModule
+try:
+	from string import Template
+	import pycuda.autoinit
+	import pycuda.gpuarray as gpuarray
+	import pycuda.driver as cuda
+	from pycuda.compiler import SourceModule
+except ImportError:
+    pass
+
 
 # ======================================================================
 # Class FeatureFunction
@@ -279,23 +283,29 @@ class FeatureFunction:
 		w = self.width //2
 		h = self.height //2
 		types=["one","diff","sum","ratio"]
-		isDefault = true
+		isDefault = True
+		isPerClass = False
 		
 		if( (self.random_weight_per_class != None) and (stats != None) ):
-			#TODO
-			acc = self.random_weight_per_class * stats
-			isDefault = false
+			isPerClass = True
+			isDefault = False
 		elif( self.random_weight != None):
 			acc = self.random_weight
-			isDefault = false
+			isDefault = False
 
 		if (not isDefault):
 			weights = acc['RQE']['type']
+			if isPerClass:
+				weights = weights*stats
+				
 			cumdist = list(itertools.accumulate(weights))
 			x = random.random() * cumdist[-1]
 			t = types[bisect.bisect(cumdist, x)]
 
 			weights = acc['RQE']['channel']
+			if isPerClass:
+				weights = weights*stats
+
 			cumdist = list(itertools.accumulate(weights))
 			x = random.random() * cumdist[-1]
 			Channel1 = bisect.bisect(cumdist, x)
@@ -303,6 +313,9 @@ class FeatureFunction:
 			Channel2 = bisect.bisect(cumdist, x)
 
 			weights = acc['RQE']['windows_width']
+			if isPerClass:
+				weights = weights*stats
+
 			cumdist = list(itertools.accumulate(weights))
 			x = random.random() * cumdist[-1]
 			w1 = bisect.bisect(cumdist, x) //2
@@ -310,6 +323,9 @@ class FeatureFunction:
 			w2 = bisect.bisect(cumdist, x) //2
 
 			weights = acc['RQE']['windows_height']
+			if isPerClass:
+				weights = weights*stats
+
 			cumdist = list(itertools.accumulate(weights))
 			x = random.random() * cumdist[-1]
 			h1 = bisect.bisect(cumdist, x) //2
@@ -317,6 +333,9 @@ class FeatureFunction:
 			h2 = bisect.bisect(cumdist, x) //2
 
 			weights = acc['RQE']['windows_dist']
+			if isPerClass:
+				weights = weights*stats
+
 			cumdist = list(itertools.accumulate(weights))
 			x = random.random() * cumdist[-1]
 			d1 = bisect.bisect(cumdist, x)
@@ -368,13 +387,6 @@ class FeatureFunction:
 				Ymax2 = h-1
 				Ymin2 = Ymax2 - h2
 
-			option={ 'type' : 'RQE', 'RQE' : { 'type' :  t,
-					'windows' : [
-						{ 'Xmin' : Xmin1,'Ymin' : Ymin1,'Xmax' : Xmax1,'Ymax' : Ymax1,'Channel' : Channel1},
-						{ 'Xmin' : Xmin2,'Ymin' : Ymin2,'Xmax' : Xmax2,'Ymax' : Ymax2,'Channel' : Channel2},
-					] } }
-			self.option = option
-
 		else:
 			t= random.choice(types)
 
@@ -390,6 +402,13 @@ class FeatureFunction:
 			Ymax2 = random.randint(Ymin2+1, h-1)
 			Channel2 = random.randint(0,self.nb_channels-1)
 
+		option={ 'type' : 'RQE', 'RQE' : { 'type' :  t,
+				'windows' : [
+					{ 'Xmin' : Xmin1,'Ymin' : Ymin1,'Xmax' : Xmax1,'Ymax' : Ymax1,'Channel' : Channel1},
+					{ 'Xmin' : Xmin2,'Ymin' : Ymin2,'Xmax' : Xmax2,'Ymax' : Ymax2,'Channel' : Channel2},
+				] } }
+		self.option = option
+
 	def getEmptyAccumulator(self):
 		acc = {}
 		#if self.option['type'] == 'RQE':
@@ -401,6 +420,7 @@ class FeatureFunction:
 		req['windows_height'] = numpy.zeros(self.height)
 		dMax = int(math.ceil(math.sqrt(math.pow(self.width,2) + math.pow(self.height,2))))
 		req['windows_dist'] = numpy.zeros(dMax)
+		req['img'] = numpy.zeros((self.width,self.height,self.nb_channels))
 		acc['RQE'] = req
 
 		return acc		
@@ -416,6 +436,7 @@ class FeatureFunction:
 		req['windows_height'] = numpy.zeros((self.height,nbClasses))
 		dMax = int(math.ceil(math.sqrt(math.pow(self.width,2) + math.pow(self.height,2))))
 		req['windows_dist'] = numpy.zeros((dMax,nbClasses))
+		req['img'] = numpy.zeros((self.width,self.height,self.nb_channels,nbClasses))
 		acc['RQE'] = req
 
 		return acc
@@ -430,7 +451,10 @@ class FeatureFunction:
 			xM1 = w['Xmax']
 			ym1 = w['Ymin']
 			yM1 = w['Ymax']
-			
+
+			dX = self.width//2
+			dY = self.height//2
+				
 			type = 0
 			if param['type'] == 'sum':
 				type = 1
@@ -441,12 +465,14 @@ class FeatureFunction:
 
 			acc['RQE']['type'][type] += improvement
 	
+	
 			if type == 0:
 				acc['RQE']['channel'][c1] += improvement
 				acc['RQE']['windows_width'][xM1-xm1] += improvement
 				acc['RQE']['windows_height'][yM1-ym1] += improvement
 				d = int(math.floor(math.sqrt(math.pow(xM1+xm1,2) + math.pow(yM1+ym1,2))))
 				acc['RQE']['windows_dist'][d] += improvement
+				acc['RQE']['img'][xm1+dX:xM1+dX,ym1+dY:yM1+dY,c1] += improvement
 			else:
 				w = param['windows'][1]
 				c2 = w['Channel']
@@ -464,9 +490,11 @@ class FeatureFunction:
 				acc['RQE']['windows_dist'][d] += improvement/2
 				d = int(math.floor(math.sqrt(math.pow(xM2+xm2,2) + math.pow(yM2+ym2,2))))
 				acc['RQE']['windows_dist'][d] += improvement/2
+				
+				acc['RQE']['img'][xm1+dX:xM1+dX,ym1+dY:yM1+dY,c1] += improvement/2
+				acc['RQE']['img'][xm2+dX:xM2+dX,ym2+dY:yM2+dY,c2] += improvement/2
 
 	def addFeatureImportanceByClass(self, improvement, stats, acc):
-
 		if self.option['type'] == 'RQE':
 			param = self.option['RQE']
 			w = param['windows'][0]
@@ -475,6 +503,9 @@ class FeatureFunction:
 			xM1 = w['Xmax']
 			ym1 = w['Ymin']
 			yM1 = w['Ymax']
+			
+			dX = self.width//2
+			dY = self.height//2
 			
 			type = 0
 			if param['type'] == 'sum':
@@ -492,6 +523,7 @@ class FeatureFunction:
 				acc['RQE']['windows_height'][yM1-ym1,:] += improvement*stats
 				d = int(math.floor(math.sqrt(math.pow(xM1+xm1,2) + math.pow(yM1+ym1,2))))
 				acc['RQE']['windows_dist'][d,:] += improvement*stats
+				acc['RQE']['img'][xm1+dX:xM1+dX,ym1+dY:yM1+dY,c1,:] += improvement*stats
 			else:
 				w = param['windows'][1]
 				c2 = w['Channel']
@@ -509,6 +541,8 @@ class FeatureFunction:
 				acc['RQE']['windows_dist'][d,:] += improvement/2*stats
 				d = int(math.floor(math.sqrt(math.pow(xM2+xm2,2) + math.pow(yM2+ym2,2))))
 				acc['RQE']['windows_dist'][d,:] += improvement/2*stats
+				acc['RQE']['img'][xm1+dX:xM1+dX,ym1+dY:yM1+dY,c1] += improvement/2
+				acc['RQE']['img'][xm2+dX:xM2+dX,ym2+dY:yM2+dY,c2] += improvement/2
 
 	def __repr__(self):
 		return "FeatureFunction " + str(self.nb_channels) + " " +str(self.width) + " " +str(self.height) + " " + self.option.__repr__()

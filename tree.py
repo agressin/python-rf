@@ -1,9 +1,13 @@
 from string import Template
 from copy import deepcopy
-import pycuda.autoinit
-import pycuda.gpuarray as gpuarray
-import pycuda.driver as cuda
-from pycuda.compiler import SourceModule
+try:
+	import pycuda.autoinit
+	import pycuda.gpuarray as gpuarray
+	import pycuda.driver as cuda
+	from pycuda.compiler import SourceModule
+except ImportError:
+    pass
+
 import numpy
 import math
 
@@ -32,7 +36,7 @@ class Node:
 # Class Split
 # ======================================================================
 class Split(Node):
-	"""Class Splitv"""
+	"""Class Split"""
 	 
 	def __init__(self,parent, is_left, feature, threshold, impurity,
 					n_node_samples, improvement, stats):
@@ -45,13 +49,14 @@ class Split(Node):
 
 
 	def __repr__(self):
-		return "SPLIT %s, %s, %s, %s, %s, %s " % (
+		return "SPLIT %s, %s, %s, %s, %s, %s, %s " % (
 					self.parent,
 					self.impurity,
 					self.n_node_samples,
 					self.feature,
 					self.threshold,
-					self.childs)
+					self.childs,
+					self.stats)
 
 # ======================================================================
 # Class Leaf
@@ -88,7 +93,7 @@ class StackRecord:
 		self.stats=deepcopy(stats)
 
 	def __repr__(self):
-		return "StackRecord %s, %s, %s, %s, %s, %s " % (self.start, self.end, self.depth, self.parent, self.is_left, self.impurity)
+		return "StackRecord %s, %s, %s, %s, %s, %s, %s " % (self.start, self.end, self.depth, self.parent, self.is_left, self.impurity, self.stats)
 
 # ======================================================================
 # Class Node for GPU
@@ -492,14 +497,15 @@ class Tree:
 
 	def getFeatureImportanceByClass(self, acc = None):
 		if(acc == None):
-			acc = self.featureFunction.getEmptyAccumulatorByClass()
+			acc = self.featureFunction.getEmptyAccumulatorByClass(self.n_classes)
 		for node in self.nodes:
 			if not node.isLeaf():
 				#idLeft, idRight = node.childs
 				#improvement = node.impurity - self.nodes[idLeft].impurity - self.nodes[idRight].impurity
 				improvement = node.improvement
-				stats = numpy.asarray(node.stats)
-				node.feature.addFeatureImportanceByClass(improvement, stats, acc)
+				if(len(node.stats) == self.n_classes):
+					stats = numpy.asarray(node.stats)
+					node.feature.addFeatureImportanceByClass(improvement, stats, acc)
 		
 		return acc
 
