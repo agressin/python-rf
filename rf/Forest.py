@@ -213,7 +213,6 @@ class myRandomForestClassifier():
 			trees = dview.map_sync(lambda i,t, s = self, im = imarray, si = sample_index, y = y, l = len(trees), v = self.verbose, g = gpu: _parallel_build_trees_image(
 					t, s, im, si, y, i, l, v, g),
 					range(len(trees)), trees)
-
 		# Collect newly grown trees
 		self.estimators_.extend(trees)
 
