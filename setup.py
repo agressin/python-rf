@@ -1,6 +1,7 @@
 from distutils.core import setup
-from Cython.Build import cythonize
 
 setup(
-    ext_modules=cythonize("FeatureFunction.pyx"),
+    name='rf',
+    version='1.0',
+    py_modules=['rf','rf.Splitter', 'rf.Criterion', 'rf.FeatureFunction', 'rf.TrainSamples', 'rf.Forest', 'rf.DecisionTree', 'rf.tree']
 )

@@ -177,7 +177,7 @@ class myRandomForestClassifier():
 
 		return self
 
-	def fit_image(self, imarray, sample_index, y, gpu = False):
+	def fit_image(self, imarray, sample_index, y, gpu = False, dview = None):
 		"""Build a forest of trees from the training set (X, y)"""
 
 		n_samples = sample_index.shape[0]
@@ -202,13 +202,18 @@ class myRandomForestClassifier():
 			X = imarray
 			n_jobs = self.n_jobs
 
-		trees = Parallel(n_jobs=n_jobs, verbose=self.verbose,
-						 backend="threading")(
-			delayed(_parallel_build_trees_image)(
-				t, self, imarray, sample_index, y, i, len(trees),
-				verbose = self.verbose, gpu = gpu)
-			for i, t in enumerate(trees))
-
+		if (dview is None):
+			trees = Parallel(n_jobs=n_jobs, verbose=self.verbose,
+							 backend="threading")(
+				delayed(_parallel_build_trees_image)(
+					t, self, imarray, sample_index, y, i, len(trees),
+					verbose = self.verbose, gpu = gpu)
+				for i, t in enumerate(trees))
+		else:
+			trees = dview.map_sync(lambda i,t, s = self, im = imarray, si = sample_index, y = y, l = len(trees), v = self.verbose, g = gpu: _parallel_build_trees_image(
+					t, s, im, si, y, i, l, v, g),
+					range(len(trees)), trees)
+			
 		# Collect newly grown trees
 		self.estimators_.extend(trees)
 
