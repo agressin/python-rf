@@ -58,7 +58,7 @@ class myDecisionTreeClassifier:
 		self.tree.release()
 		return self
 
-	def fit_image(self, X, sample_index, y, sample_weight=None, gpu = False):
+	def fit_image(self, raster_data, sample_index, y, sample_weight=None):
 		"""Build a decision tree from one image."""
 
 		#Get classes
@@ -78,11 +78,18 @@ class myDecisionTreeClassifier:
 										   max_depth,
 										   self.n_classes,
 										   self.max_leaf_nodes)
-
-		if self.max_leaf_nodes < 0:
-			self.tree.depthFirstTreeBuilderImage(X, sample_index,y,sample_weight, gpu)
+		
+		if (type(raster_data) is np.ndarray):
+			if self.max_leaf_nodes < 0:
+				self.tree.depthFirstTreeBuilderImage(raster_data, sample_index,y,sample_weight)
+			else:
+				self.tree.bestFirstTreeBuilderImage(raster_data, sample_index,y,sample_weight)
 		else:
-			self.tree.bestFirstTreeBuilderImage(X, sample_index,y,sample_weight, gpu)
+			X = self.featureFunction.getSamplesDataFromImage(raster_data, sample_index)
+			if self.max_leaf_nodes < 0:
+				self.tree.depthFirstTreeBuilder(X,y,sample_weight)
+			else:
+				self.tree.bestFirstTreeBuilder(X,y,sample_weight)
 
 		self.tree.release()
 		return self

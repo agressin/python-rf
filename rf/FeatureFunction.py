@@ -3,6 +3,7 @@ import random
 import math
 import itertools
 import bisect
+from osgeo import gdal
 
 try:
 	from string import Template
@@ -108,7 +109,7 @@ class FeatureFunction:
 		w = self.width //2
 		h = self.height //2
 
-		Xt = numpy.zeros(1*n_channels*self.width*self.height).reshape(1,n_channels,self.width,self.height)
+		Xt = numpy.zeros((1,n_channels,self.width,self.height))
 		Xf = []
 		for id in sample_index:
 			i, j = id
@@ -178,11 +179,11 @@ class FeatureFunction:
 					float r = 0;
 					if(f->type == 0) // ONE
 						r = one(X,idx, idy,f->c1,f->xm1,f->xM1,f->ym1,f->yM1);
-					else if (f->type == 1) // SUM
+					elif (f->type == 1) // SUM
 						r = one(X,idx, idy,f->c1,f->xm1,f->xM1,f->ym1,f->yM1) + one(X,idx, idy,f->c2,f->xm2,f->xM2,f->ym2,f->yM2);
-					else if (f->type == 2) // DIFF
+					elif (f->type == 2) // DIFF
 						r = one(X,idx, idy,f->c1,f->xm1,f->xM1,f->ym1,f->yM1) - one(X,idx, idy,f->c2,f->xm2,f->xM2,f->ym2,f->yM2);
-					else if (f->type == 3) // RATIO
+					elif (f->type == 3) // RATIO
 					{
 						r = one(X,idx, idy,f->c1,f->xm1,f->xM1,f->ym1,f->yM1) + one(X,idx, idy,f->c2,f->xm2,f->xM2,f->ym2,f->yM2);
 						if(abs(r)>=0.00001)
@@ -543,6 +544,83 @@ class FeatureFunction:
 				acc['RQE']['windows_dist'][d,:] += improvement/2*stats
 				acc['RQE']['img'][xm1+dX:xM1+dX,ym1+dY:yM1+dY,c1] += improvement/2
 				acc['RQE']['img'][xm2+dX:xM2+dX,ym2+dY:yM2+dY,c2] += improvement/2
+
+	def getSamplesDataFromImage(self, input_data, sample_index):
+		if(type(input_data) is str):
+			raster_data = gdal.Open(input_data)
+		elif (type(input_data) is gdal.Dataset):
+			raster_data = input_data
+		elif (type(input_data) is numpy.ndarray):
+			print("Error format ndarray is no more support")
+			return False
+	
+		block_sizes = raster_data.GetRasterBand(1).GetBlockSize()  
+		x_block_size = block_sizes[0]  
+		y_block_size = block_sizes[1]  
+			
+		xsize = raster_data.RasterXSize  
+		ysize = raster_data.RasterYSize
+		
+		nb_samples = len(sample_index)
+		X = numpy.zeros((nb_samples,self.nb_channels,self.width,self.height))
+
+		w = self.width //2
+		h = self.height //2
+		for i_b in range(0, xsize, x_block_size):  
+			if i_b + x_block_size < xsize:  
+				x_block_size_tmp = x_block_size
+			else:  
+				x_block_size_tmp = xsize - i_b  
+			for j_b in range(0, ysize, y_block_size):  
+				if j_b + y_block_size < ysize:  
+						y_block_size_tmp = y_block_size  
+				else:
+						y_block_size_tmp = ysize - j_b
+				
+				#Get sample in chunk
+				list_id_in_chunk = numpy.where(
+							(j_b - w <= sample_index[:,0]) &
+							(sample_index[:,0] < j_b + y_block_size_tmp + w) &
+							(i_b - h <= sample_index[:,1]) &
+							(sample_index[:,1] < i_b + x_block_size_tmp + h)
+						)[0]
+				#
+				if(len(list_id_in_chunk)):
+					data_chunk = raster_data.ReadAsArray(i_b, j_b, x_block_size_tmp, y_block_size_tmp)
+					for id in list_id_in_chunk:
+						j, i = sample_index[id]
+						
+						imin_image = max(0,i-w)
+						if imin_image == 0:
+							imax_image = 2*w
+						else:
+							imax_image = min(i+w,xsize)
+							if imax_image == xsize:
+								imin_image = xsize-2*w
+
+						imin_chunk = max(0, imin_image - i_b)
+						imin_out   = max(0, i_b - imin_image)
+						
+						imax_chunk = min(x_block_size_tmp, max(1,imax_image - i_b))
+						imax_out   = imin_out + imax_chunk - imin_chunk
+						
+						jmin_image = max(0,j-h)
+						if jmin_image == 0:
+							jmax_image = 2*h
+						else:
+							jmax_image = min(j+h,ysize)
+							if jmax_image == ysize:
+								jmin_image = ysize-2*h
+						
+						jmin_chunk = max(0, jmin_image - j_b)
+						jmin_out   = max(0, j_b - jmin_image)
+						
+						jmax_chunk = min(y_block_size_tmp, max(1,jmax_image - j_b))
+						jmax_out   = jmin_out + jmax_chunk - jmin_chunk
+
+						X[id,:,jmin_out:jmax_out,imin_out:imax_out] = data_chunk[:,jmin_chunk:jmax_chunk,imin_chunk:imax_chunk]
+		return X.cumsum(3).cumsum(2)
+					
 
 	def __repr__(self):
 		return "FeatureFunction " + str(self.nb_channels) + " " +str(self.width) + " " +str(self.height) + " " + self.option.__repr__()

@@ -69,8 +69,8 @@ def _parallel_build_trees(tree, forest, X, y, tree_idx, n_trees,
 
 	return tree
 
-def _parallel_build_trees_image(tree, forest, X, sample_index, y, tree_idx, n_trees,
-						  verbose=0, class_weight=None,  gpu = False):
+def _parallel_build_trees_image(tree, forest, raster_data, sample_index, y, tree_idx, n_trees,
+						  verbose=0, class_weight=None):
 	"""Private function used to fit a single tree in parallel."""
 	if verbose > 1:
 		print("building tree %d of %d" % (tree_idx + 1, n_trees))
@@ -85,12 +85,12 @@ def _parallel_build_trees_image(tree, forest, X, sample_index, y, tree_idx, n_tr
 
 		if class_weight == 'subsample':
 			curr_sample_weight *= compute_sample_weight('auto', y, indices)
-		tree.fit_image(X, sample_index, y, curr_sample_weight, gpu)
+		tree.fit_image(raster_data, sample_index, y, curr_sample_weight)
 
 		tree.indices_ = sample_counts > 0.
 
 	else:
-		tree.fit_image(X, sample_index, y, gpu)
+		tree.fit_image(raster_data, sample_index, y)
 
 	return tree
 
@@ -154,12 +154,25 @@ class myRandomForestClassifier():
 		# for fitting the trees is internally releasing the Python GIL
 		# making threading always more efficient than multiprocessing in
 		# that case.
-		trees = Parallel(n_jobs=self.n_jobs, verbose=self.verbose,
-						 backend="threading")(
-			delayed(_parallel_build_trees)(
-				t, self, X, y, i, len(trees),
-				verbose=self.verbose)
-			for i, t in enumerate(trees))
+
+
+		if (dview is None):
+			trees = Parallel(n_jobs=self.n_jobs, verbose=self.verbose,
+							 backend="threading")(
+				delayed(_parallel_build_trees)(
+					t, self, X, y, i, len(trees),
+					verbose=self.verbose)
+				for i, t in enumerate(trees))
+		else:
+			tasks = []
+			for i, t in enumerate(trees):
+				ar = dview.apply_async(_parallel_build_trees,
+					t, self, X, y, i, len(trees),
+					verbose=self.verbose)
+				tasks.append(ar)
+
+			# wait for computation to end
+			trees = [ar.get() for ar in tasks]
 
 		# Collect newly grown trees
 		self.estimators_.extend(trees)
@@ -177,7 +190,7 @@ class myRandomForestClassifier():
 
 		return self
 
-	def fit_image(self, imarray, sample_index, y, gpu = False, dview = None):
+	def fit_image(self, raster_data, sample_index, y, dview = None):
 		"""Build a forest of trees from the training set (X, y)"""
 
 		n_samples = sample_index.shape[0]
@@ -195,24 +208,24 @@ class myRandomForestClassifier():
 			tree = deepcopy(self.estimator)
 			trees.append(tree)
 
-		if gpu:
-			X = gpuarray.to_gpu(imarray.astype(numpy.float32))
-			n_jobs = 1
-		else:
-			X = imarray
-			n_jobs = self.n_jobs
+		n_jobs = self.n_jobs
 
 		if (dview is None):
 			trees = Parallel(n_jobs=n_jobs, verbose=self.verbose,
 							 backend="threading")(
 				delayed(_parallel_build_trees_image)(
-					t, self, imarray, sample_index, y, i, len(trees),
-					verbose = self.verbose, gpu = gpu)
+					t, self, raster_data, sample_index, y, i, len(trees),
+					verbose = self.verbose)
 				for i, t in enumerate(trees))
 		else:
-			trees = dview.map_sync(lambda i,t, s = self, im = imarray, si = sample_index, y = y, l = len(trees), v = self.verbose, g = gpu: _parallel_build_trees_image(
-					t, s, im, si, y, i, l, v, g),
-					range(len(trees)), trees)
+			tasks = []
+			for i, t in enumerate(trees):
+				ar = dview.apply_async(_parallel_build_trees_image, t, self, raster_data, sample_index, y, i, len(trees),
+					verbose = self.verbose)
+				tasks.append(ar)
+
+			# wait for computation to end
+			trees = [ar.get() for ar in tasks]
 			
 		# Collect newly grown trees
 		self.estimators_.extend(trees)

@@ -311,11 +311,11 @@ class Tree:
 		
 		self.depthFirstTreeBuilderCommon()
 
-	def depthFirstTreeBuilderImage(self, X, sample_index, y, sample_weight, gpu = False):
+	def depthFirstTreeBuilderImage(self, X, sample_index, y, sample_weight):
 		"""Build a decision tree from the training set (X, y) with depth First strategie """
 
 		# Recursive partition (without actual recursion)
-		self.splitter.init_image(X, sample_index, y, sample_weight, gpu)
+		self.splitter.init_image(X, sample_index, y, sample_weight)
 		
 		self.depthFirstTreeBuilderCommon()
 

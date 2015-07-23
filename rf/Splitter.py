@@ -62,10 +62,10 @@ class Splitter:
 		weighted_n_samples = 0.0
 		for i in range(self.n_samples):
 			# Only work with positively weighted samples
-			if sample_weight == None or sample_weight[i] != 0.0:
+			if (sample_weight is None) or (sample_weight[i] != 0.0):
 				self.samples.append(i)
 
-			if sample_weight != None:
+			if (sample_weight is not None):
 				weighted_n_samples += sample_weight[i]
 			else:
 				weighted_n_samples += 1.0
@@ -78,12 +78,12 @@ class Splitter:
 		self.y = y
 		self.sample_weight = sample_weight
 		
-		if(len(X.shape) == 3):
-			self.featureFunction.init(X.shape[1], X.shape[2], X.shape[3])
-		else:
-			self.featureFunction.init(X.shape[1])
+		#if(len(X.shape) == 3):
+		#	self.featureFunction.init(X.shape[1], X.shape[2], X.shape[3])
+		#else:
+		#	self.featureFunction.init(X.shape[1])
 
-	def init_image(self, X, sample_index, y, sample_weight=None, gpu = False):
+	def init_image(self, X, sample_index, y, sample_weight=None):
 		"""Initialize the splitter."""
 
 		# Initialize samples and features structures
@@ -96,10 +96,10 @@ class Splitter:
 		weighted_n_samples = 0.0
 		for i in range(self.n_samples):
 			# Only work with positively weighted samples
-			if sample_weight == None or sample_weight[i] != 0.0:
+			if (sample_weight is None) or (sample_weight[i] != 0.0):
 				self.samples.append(i)
 
-			if sample_weight != None:
+			if (sample_weight is not None):
 				weighted_n_samples += sample_weight[i]
 			else:
 				weighted_n_samples += 1.0
@@ -112,8 +112,7 @@ class Splitter:
 		self.sample_index = sample_index
 		self.y = y
 		self.sample_weight = sample_weight
-		
-		self.gpu_mode = gpu
+
 		self.image_mode = True
 
 
@@ -170,7 +169,7 @@ class Splitter:
 			current.feature = self.featureFunction.copy()
 
 			if(self.image_mode):
-				Xf = current.feature.evaluate_image(X, sample_index[samples[start:end]], self.gpu_mode)
+				Xf = current.feature.evaluate_image(X, sample_index[samples[start:end]])
 			else:
 				# Compute feature on each sample
 				Xtemp = deepcopy(X[start:end])
