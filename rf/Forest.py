@@ -218,15 +218,10 @@ class myRandomForestClassifier():
 					verbose = self.verbose)
 				for i, t in enumerate(trees))
 		else:
-			tasks = []
-			for i, t in enumerate(trees):
-				ar = dview.apply_async(_parallel_build_trees_image, t, self, raster_data, sample_index, y, i, len(trees),
-					verbose = self.verbose)
-				tasks.append(ar)
+			trees = dview.map_sync(lambda i,t, s = self, r = raster_data, si = sample_index, y = y, l = len(trees), v = self.verbose : _parallel_build_trees_image(
+					t, s, r, si, y, i, l, v ),
+					range(len(trees)), trees)
 
-			# wait for computation to end
-			trees = [ar.get() for ar in tasks]
-			
 		# Collect newly grown trees
 		self.estimators_.extend(trees)
 
