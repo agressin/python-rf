@@ -546,14 +546,20 @@ class FeatureFunction:
 				acc['RQE']['img'][xm2+dX:xM2+dX,ym2+dY:yM2+dY,c2] += improvement/2
 
 	def getSamplesDataFromImage(self, input_data, sample_index):
+		print(input_data)
 		if(type(input_data) is str):
+			print("raster_data from filename")
 			raster_data = gdal.Open(input_data)
 		elif (type(input_data) is gdal.Dataset):
+			print("raster_data from gdal raster")
 			raster_data = input_data
 		elif (type(input_data) is numpy.ndarray):
 			print("Error format ndarray is no more support")
 			return False
-	
+		else
+			print("Error input_data format unknown")
+			return False
+
 		block_sizes = raster_data.GetRasterBand(1).GetBlockSize()  
 		x_block_size = block_sizes[0]  
 		y_block_size = block_sizes[1]  

@@ -221,9 +221,8 @@ class myRandomForestClassifier():
 			tasks = []
 			for i, t in enumerate(trees):
 				ar = dview.apply_async(_parallel_build_trees_image,
-					t, self, imarray, sample_index, y, i, len(trees),
-					verbose = self.verbose, gpu = gpu
-					)
+					t, self, raster_data, sample_index, y, i, len(trees),
+					verbose = self.verbose)
 				tasks.append(ar)
 
 			# wait for computation to end

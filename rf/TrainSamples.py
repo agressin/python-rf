@@ -9,16 +9,20 @@ class TrainSamplesGenerator():
 		self.is_init = False
 		
 		if(type(input_data) is str):
+			print("raster_data from filename")
 			raster_data = gdal.Open(input_data)
 		elif (type(input_data) is gdal.Dataset):
+			print("raster_data from gdal raster")
 			raster_data = input_data
 		elif (type(input_data) is np.ndarray):
 			print("Error format ndarray is no more support")
 			return False
 	
 		if(type(input_label) is str):
+			print("raster_label from filename")
 			raster_label = gdal.Open(input_label)
 		elif (type(input_label) is gdal.Dataset):
+			print("raster_label from gdal raster")
 			raster_label = input_label
 		elif (type(input_label) is np.ndarray):
 			print("Error format ndarray is no more support")
