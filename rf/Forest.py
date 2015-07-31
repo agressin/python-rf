@@ -191,7 +191,7 @@ class myRandomForestClassifier():
 		return self
 
 	def fit_image(self, raster_data, sample_index, y, dview = None):
-		"""Build a forest of trees from the training set (X, y)"""
+		"""Build a forest of trees from the raster training set"""
 
 		n_samples = sample_index.shape[0]
 
