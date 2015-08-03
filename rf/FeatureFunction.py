@@ -556,7 +556,7 @@ class FeatureFunction:
 		elif (type(input_data) is numpy.ndarray):
 			print("Error format ndarray is no more support")
 			return False
-		else
+		else:
 			print("Error input_data format unknown")
 			return False
 

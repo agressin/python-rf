@@ -44,13 +44,13 @@ def _partition_estimators(n_estimators, n_jobs):
 
 	return n_jobs, n_estimators_per_job.tolist(), [0] + starts.tolist()
 
-def _parallel_build_trees(tree, forest, X, y, tree_idx, n_trees,
+def _parallel_build_trees(tree, bootstrap, X, y, tree_idx, n_trees,
 						  verbose=0, class_weight=None):
 	"""Private function used to fit a single tree in parallel."""
 	if verbose > 1:
 		print("building tree %d of %d" % (tree_idx + 1, n_trees))
 
-	if forest.bootstrap:
+	if bootstrap:
 		n_samples = X.shape[0]
 		curr_sample_weight = numpy.ones((n_samples,), dtype=numpy.float64)
 
@@ -69,13 +69,13 @@ def _parallel_build_trees(tree, forest, X, y, tree_idx, n_trees,
 
 	return tree
 
-def _parallel_build_trees_image(tree, forest, raster_data, sample_index, y, tree_idx, n_trees,
+def _parallel_build_trees_image(tree, bootstrap, raster_data, sample_index, y, tree_idx, n_trees,
 						  verbose=0, class_weight=None):
 	"""Private function used to fit a single tree in parallel."""
 	if verbose > 1:
 		print("building tree %d of %d" % (tree_idx + 1, n_trees))
 
-	if forest.bootstrap:
+	if bootstrap:
 		n_samples = sample_index.shape[0]
 		curr_sample_weight = numpy.ones((n_samples,), dtype=numpy.float64)
 
@@ -160,14 +160,14 @@ class myRandomForestClassifier():
 			trees = Parallel(n_jobs=self.n_jobs, verbose=self.verbose,
 							 backend="threading")(
 				delayed(_parallel_build_trees)(
-					t, self, X, y, i, len(trees),
+					t, self.bootstrap, X, y, i, len(trees),
 					verbose=self.verbose)
 				for i, t in enumerate(trees))
 		else:
 			tasks = []
 			for i, t in enumerate(trees):
 				ar = dview.apply_async(_parallel_build_trees,
-					t, self, X, y, i, len(trees),
+					t, self.bootstrap, X, y, i, len(trees),
 					verbose=self.verbose)
 				tasks.append(ar)
 
@@ -214,14 +214,14 @@ class myRandomForestClassifier():
 			trees = Parallel(n_jobs=n_jobs, verbose=self.verbose,
 							 backend="threading")(
 				delayed(_parallel_build_trees_image)(
-					t, self, raster_data, sample_index, y, i, len(trees),
+					t, self.bootstrap, raster_data, sample_index, y, i, len(trees),
 					verbose = self.verbose)
 				for i, t in enumerate(trees))
 		else:
 			tasks = []
 			for i, t in enumerate(trees):
 				ar = dview.apply_async(_parallel_build_trees_image,
-					t, self, raster_data, sample_index, y, i, len(trees),
+					t, self.bootstrap, raster_data, sample_index, y, i, len(trees),
 					verbose = self.verbose)
 				tasks.append(ar)
 
@@ -344,7 +344,7 @@ class myRandomForestClassifier():
 		return out
 
 	def save(self, filename):
-		return pickle.dump(self, open(filename, "wb"))
+		return pickle.dump(self, open(filename, "wb"), protocol = 4)
 
 	@staticmethod
 	def load(filename):
