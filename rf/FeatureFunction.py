@@ -466,7 +466,6 @@ class FeatureFunction:
 
 			acc['RQE']['type'][type] += improvement
 	
-	
 			if type == 0:
 				acc['RQE']['channel'][c1] += improvement
 				acc['RQE']['windows_width'][xM1-xm1] += improvement

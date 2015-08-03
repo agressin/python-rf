@@ -99,9 +99,9 @@ class TrainSamplesGenerator():
 
 			nb_samples = len(ytmp)
 			if( (windows_w == 1) and (windows_h == 1) ):
-				X = np.zeros(nb_samples*self.c_d).reshape(nb_samples,self.c_d)			
+				X = np.zeros((nb_samples,self.c_d))
 			else:
-				X = np.zeros(nb_samples*self.c_d*windows_w*2*windows_h*2).reshape(nb_samples,self.c_d,windows_w*2,windows_h*2)
+				X = np.zeros((nb_samples,self.c_d,windows_w*2,windows_h*2))
 
 			for i in range(0,nb_samples):
 				X[i] = Xtmp[i]

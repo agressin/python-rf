@@ -101,7 +101,7 @@ class ClassificationCriterion(Criterion):
 		for p in range(start, end):
 			i = samples[p]
 			c = y[i]
-			if sample_weight != None:
+			if sample_weight is not None:
 				w = sample_weight[i]
 			self.label_count_total[c] += w
 			weighted_n_node_samples += w
@@ -133,7 +133,7 @@ class ClassificationCriterion(Criterion):
 		for p in range(self.pos, new_pos):
 			i = self.samples[p]
 
-			if self.sample_weight != None:
+			if self.sample_weight is not None:
 				w = self.sample_weight[i]
 
 			self.label_count_left[self.y[i]]  += w

@@ -4,7 +4,10 @@ import numpy
 import multiprocessing as mp
 from copy import deepcopy
 from joblib import Parallel, delayed
-import pickle
+try:
+   import cPickle as pickle
+except:
+   import pickle
 import random
 
 try:
@@ -132,7 +135,7 @@ class myRandomForestClassifier():
 		self.n_jobs = n_jobs
 		self.estimators_ = []
 
-	def fit(self, X, y):
+	def fit(self, X, y, dview = None):
 		"""Build a forest of trees from the training set (X, y)"""
 
 		n_samples = X.shape[0]
@@ -344,8 +347,14 @@ class myRandomForestClassifier():
 		return out
 
 	def save(self, filename):
-		return pickle.dump(self, open(filename, "wb"), protocol = 4)
+		fichier = open(filename, "wb")
+		out = pickle.dump(self, fichier, protocol = 4)
+		fichier.close()
+		return out
 
 	@staticmethod
 	def load(filename):
-		return pickle.load(open(filename,"rb"))
+		fichier = open(filename, "rb")
+		out = pickle.load(fichier)
+		fichier.close()
+		return out
