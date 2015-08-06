@@ -26,13 +26,14 @@ class FeatureFunction:
 		- height
 	"""
  
-	def __init__(self, nb_channels = 0, width = 0, height =0, option = {}, random_weight=None, random_weight_per_class=None):
+	def __init__(self, nb_channels = 0, width = 0, height =0, option = {}, random_weight=None, random_weight_per_class=None, epsilon = 0.1):
 		self.nb_channels = nb_channels
 		self.width	 = (width//2)  * 2
 		self.height  = (height//2) * 2
 		self.option	 = option
 		self.random_weight = random_weight
 		self.random_weight_per_class = random_weight_per_class
+		self.epsilon = epsilon
 
 	def init(self, nb_channels,width,height):
 		self.nb_channels = nb_channels
@@ -283,6 +284,8 @@ class FeatureFunction:
 
 		w = self.width //2
 		h = self.height //2
+		epsilon = self.epsilon
+		
 		types=["one","diff","sum","ratio"]
 		isDefault = True
 		isPerClass = False
@@ -299,14 +302,27 @@ class FeatureFunction:
 			if isPerClass:
 				weights = weights*stats
 				
+			cum = numpy.sum(weights)
+			if(cum!= 0 ):
+				weights += epsilon * cum
+			else:
+				weights += epsilon
+
 			cumdist = list(itertools.accumulate(weights))
+				
 			x = random.random() * cumdist[-1]
 			t = types[bisect.bisect(cumdist, x)]
-
+			
 			weights = acc['RQE']['channel']
 			if isPerClass:
 				weights = weights*stats
 
+			cum = numpy.sum(weights)
+			if(cum!= 0 ):
+				weights += epsilon * cum
+			else:
+				weights += epsilon
+				
 			cumdist = list(itertools.accumulate(weights))
 			x = random.random() * cumdist[-1]
 			Channel1 = bisect.bisect(cumdist, x)
@@ -316,6 +332,12 @@ class FeatureFunction:
 			weights = acc['RQE']['windows_width']
 			if isPerClass:
 				weights = weights*stats
+
+			cum = numpy.sum(weights)
+			if(cum!= 0 ):
+				weights += epsilon * cum
+			else:
+				weights += epsilon				
 
 			cumdist = list(itertools.accumulate(weights))
 			x = random.random() * cumdist[-1]
@@ -327,6 +349,12 @@ class FeatureFunction:
 			if isPerClass:
 				weights = weights*stats
 
+			cum = numpy.sum(weights)
+			if(cum!= 0 ):
+				weights += epsilon * cum
+			else:
+				weights += epsilon
+
 			cumdist = list(itertools.accumulate(weights))
 			x = random.random() * cumdist[-1]
 			h1 = bisect.bisect(cumdist, x) //2
@@ -336,6 +364,12 @@ class FeatureFunction:
 			weights = acc['RQE']['windows_dist']
 			if isPerClass:
 				weights = weights*stats
+
+			cum = numpy.sum(weights)
+			if(cum!= 0 ):
+				weights += epsilon * cum
+			else:
+				weights += epsilon
 
 			cumdist = list(itertools.accumulate(weights))
 			x = random.random() * cumdist[-1]
@@ -389,7 +423,7 @@ class FeatureFunction:
 				Ymin2 = Ymax2 - h2
 
 		else:
-			t= random.choice(types)
+			t = random.choice(types)
 
 			Xmin1 = random.randint(-w,w-2)
 			Ymin1 = random.randint(-h,h-2)
@@ -545,7 +579,6 @@ class FeatureFunction:
 				acc['RQE']['img'][xm2+dX:xM2+dX,ym2+dY:yM2+dY,c2] += improvement/2
 
 	def getSamplesDataFromImage(self, input_data, sample_index):
-		print(input_data)
 		if(type(input_data) is str):
 			print("raster_data from filename")
 			raster_data = gdal.Open(input_data)

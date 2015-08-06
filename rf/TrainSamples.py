@@ -4,9 +4,10 @@ from osgeo import gdal
 
 class TrainSamplesGenerator():
 	""" TrainSampleGenerator """
-	def __init__(self, input_data, input_label):
+	def __init__(self, input_data, input_label, no_data = 0):
 		""" init"""
 		self.is_init = False
+		self.no_data = no_data
 		
 		if(type(input_data) is str):
 			print("raster_data from filename")
@@ -43,13 +44,15 @@ class TrainSamplesGenerator():
 			#Get number of pixel per classes (in the label image)
 			self.label_band = self.raster_label.GetRasterBand(1)
 			hist = np.array(self.label_band.GetHistogram(approx_ok = 0))
-			nz = np.nonzero(hist)[0].tolist()
-			classes_freq = hist[nz]
-
-			#We assume that 0 is the no data classe
-			self.classes_labels = list(range(1,len(classes_freq)))
-			#We assume that 0 is the no data classe
-			self.classes_freq = np.asarray(classes_freq[1:])
+			classes_labels = np.nonzero(hist)[0].tolist()
+			
+			#Remove no data classe
+			if no_data in classes_labels:
+				classes_labels.remove(no_data)
+			
+			self.classes_labels = classes_labels
+			self.classes_freq = hist[classes_labels]
+			
 			print("Classes labels :",self.classes_labels)
 			print("Classes frequencies :",self.classes_freq)
 			self.is_init = True

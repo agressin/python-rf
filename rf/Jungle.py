@@ -1,9 +1,13 @@
 import numpy
 import multiprocessing as mp
 from joblib import Parallel, delayed
+from copy import deepcopy
 
 from .FeatureFunction import FeatureFunction
+from .Criterion import Entropy, Gini
+from .Forest import myRandomForestClassifier
 
+#TODO fit and predict_proba
 
 class myJungleClassifier():
 	"""myJungleClassifier"""
@@ -55,14 +59,15 @@ class myJungleClassifier():
 		featureFunction = self.featureFunction
 		for i in range(self.n_forests):
 			if (i != 0):
-				if(specialisation == 'global'):
+				if(self.specialisation == 'global'):
 					acc = forest.getFeatureImportance()
 					featureFunction.random_weight = acc
-				elif(specilisation =='per_class'):
+				elif(self.specilisation =='per_class'):
 					acc_per_class = forest.getFeatureImportanceByClass()
 					featureFunction.random_weight_per_class = acc_per_class
-				if(add_previous_prob):
+				if(self.add_previous_prob):
 					#TODO
+					print("add_previous_prob is not yet implement in fit(X)")
 					X=X
 			forest = deepcopy(self.forest)
 			forest.featureFunction = featureFunction
@@ -74,20 +79,23 @@ class myJungleClassifier():
 	
 	def fit_image(self, raster_data, sample_index, y, dview = None):
 		"""Build a jungle of trees from the training set (X, y)"""
-		#TODO  : add previous proba
 		forests = []
 		featureFunction = self.featureFunction
+		SWx,SWy = featureFunction.width, featureFunction.height
 		for i in range(self.n_forests):
+			print("forest : ",i," / ",self.n_forests)
 			if (i != 0):
-				if(specialisation == 'global'):
+				if(self.specialisation == 'global'):
 					acc = forest.getFeatureImportance()
 					featureFunction.random_weight = acc
-				elif(specilisation =='per_class'):
+				elif(self.specialisation =='per_class'):
 					acc_per_class = forest.getFeatureImportanceByClass()
 					featureFunction.random_weight_per_class = acc_per_class
-				if(add_previous_prob):
-					#TODO
-					X=X
+				if(self.add_previous_prob):
+					proba = forest.predict_proba_image(raster_data,SWx,SWy)
+					featureFunction.nb_channels += proba.shape[0]
+					raster_data = numpy.concatenate((raster_data,proba))
+
 			forest = deepcopy(self.forest)
 			forest.featureFunction = featureFunction
 			forest.fit_image(raster_data, sample_index, y, dview)
@@ -105,11 +113,12 @@ class myJungleClassifier():
 
 	def predict_proba(self, X):
 		"""Predict class probabilities for X"""
-		#TODO
+		#TODO add_previous_prob
 		all_proba = []
 		for i in range(self.n_forests):
-			if ((i != 0) and add_previous_prob):
+			if ((i != 0) and self.add_previous_prob):
 				#TODO
+				print("add_previous_prob is not yet implement in predict_proba(X)")
 				X=X # + proba
 			proba = self.forests_[i].predict_proba(X)
 			all_proba.append(proba)
@@ -131,13 +140,11 @@ class myJungleClassifier():
 
 	def predict_proba_image(self, imarray, w_x, w_y):
 		"""Predict class probabilities for X"""
-		#TODO
 		all_proba = []
 		for i in range(self.n_forests):
-			if ((i != 0) and add_previous_prob):
-				#TODO
-				X=X # + proba
-			proba = self.forests_[i].predict_proba_image(imarray)
+			if ((i != 0) and self.add_previous_prob):
+				raster_data = numpy.concatenate((raster_data,proba))
+			proba = self.forests_[i].predict_proba_image(imarray, w_x, w_y)
 			all_proba.append(proba)
 		
 		if(fusion == "mean"):
@@ -149,7 +156,6 @@ class myJungleClassifier():
 			return proba
 		
 		return proba
-		
 
 	def __repr__(self):
 		out = "Jungle : \r\n"

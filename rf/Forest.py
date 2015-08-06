@@ -305,17 +305,19 @@ class myRandomForestClassifier():
 
 		return numpy.log(proba)
 
-	def predict_image(self, imarray, w_x, w_y):
+	def predict_image(self, input_data, w_x, w_y):
 		"""Predict class for X."""
-		proba = numpy.array(self.predict_proba_image(imarray, w_x, w_y))
+		proba = numpy.array(self.predict_proba_image(input_data, w_x, w_y))
 		return self.classes.take(numpy.argmax(proba, axis=0))
 
-	def predict_proba_image(self, imarray, w_x, w_y):
+	def predict_proba_image(self, array_image, w_x, w_y):
 		"""Predict class probabilities for X"""
+		
+		s_c, s_x, s_y = array_image.shape
+		array_image_cum = array_image.cumsum(2).cumsum(1)
+		x_gpu = gpuarray.to_gpu(array_image_cum.astype(numpy.float32))
 
-		x_gpu = gpuarray.to_gpu(imarray.astype(numpy.float32))
-
-		proba_gpu = gpuarray.zeros((self.n_classes,imarray.shape[1],imarray.shape[2]),numpy.float32)
+		proba_gpu = gpuarray.zeros((self.n_classes,s_x,s_y),numpy.float32)
 		
 		for e in self.estimators_:
 			e.predict_proba_image(x_gpu,proba_gpu, w_x, w_y)

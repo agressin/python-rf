@@ -143,9 +143,9 @@ for SW in range(15, 0, -5):
 			print(sizeX, sizeY)
 
 			if get_proba:
-				out = d.predict_proba_image(imarray.cumsum(2).cumsum(1),SWx,SWy)
+				out = d.predict_proba_image(imarray,SWx,SWy)
 			else:
-				out = d.predict_image(imarray.cumsum(2).cumsum(1),SWx,SWy)
+				out = d.predict_image(imarray,SWx,SWy)
 
 			stop = timeit.default_timer()
 			print(stop-start)
