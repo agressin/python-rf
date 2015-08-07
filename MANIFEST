@@ -4,6 +4,7 @@ rf/Criterion.py
 rf/DecisionTree.py
 rf/FeatureFunction.py
 rf/Forest.py
+rf/Geodesic.pyx
 rf/Jungle.py
 rf/Splitter.py
 rf/TrainSamples.py

@@ -268,12 +268,12 @@ class FeatureFunction:
 			elif  param['type'] == 'ratio':
 				type = 3
 		b = memoryview(numpy.uint32(type)); 		cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
-		b = memoryview(numpy.int32(c1)); 			cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
+		b = memoryview(numpy.int32(c1)); 				cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
 		b = memoryview(numpy.int32(xm1)); 			cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
 		b = memoryview(numpy.int32(xM1)); 			cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
 		b = memoryview(numpy.int32(ym1)); 			cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
 		b = memoryview(numpy.int32(yM1)); 			cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
-		b = memoryview(numpy.int32(c2)); 			cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
+		b = memoryview(numpy.int32(c2)); 				cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
 		b = memoryview(numpy.int32(xm2)); 			cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
 		b = memoryview(numpy.int32(xM2)); 			cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)
 		b = memoryview(numpy.int32(ym2)); 			cuda.memcpy_htod(int(f_gpu)+shift, b); shift+= len(b)

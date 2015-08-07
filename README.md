@@ -5,3 +5,7 @@ Dépendances :
 - \[ pycuda \]
 - joblib
 - six
+
+
+Installation
+ python3 setup.py install
