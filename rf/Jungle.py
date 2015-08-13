@@ -90,7 +90,7 @@ class myJungleClassifier():
 					acc_per_class = forest.getFeatureImportanceByClass()
 					featureFunction.random_weight_per_class = acc_per_class
 				if(self.add_previous_prob):
-					proba = forest.predict_proba_image(raster_data.cumsum(2).cumsum(1),SWx,SWy)
+					proba = forest.predict_proba_image(raster_data,SWx,SWy)
 					if(self.use_geodesic):
 						a = self.geodesic_a
 						a = self.geodesic_b

@@ -578,7 +578,7 @@ class FeatureFunction:
 				acc['RQE']['img'][xm1+dX:xM1+dX,ym1+dY:yM1+dY,c1] += improvement/2
 				acc['RQE']['img'][xm2+dX:xM2+dX,ym2+dY:yM2+dY,c2] += improvement/2
 
-	def getSamplesDataFromImage(self, input_data, sample_index):
+	def getSamplesDataFromImage(self, input_data, sample_index, cumul = True):
 		if(type(input_data) is str):
 			print("raster_data from filename")
 			raster_data = gdal.Open(input_data)
@@ -657,7 +657,10 @@ class FeatureFunction:
 						jmax_out   = jmin_out + jmax_chunk - jmin_chunk
 
 						X[id,:,jmin_out:jmax_out,imin_out:imax_out] = data_chunk[:,jmin_chunk:jmax_chunk,imin_chunk:imax_chunk]
-		return X.cumsum(3).cumsum(2)
+		if cumul :
+			return X.cumsum(3).cumsum(2)
+		else :
+			return X
 					
 
 	def __repr__(self):

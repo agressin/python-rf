@@ -197,6 +197,9 @@ class myRandomForestClassifier():
 		"""Build a forest of trees from the raster training set"""
 
 		n_samples = sample_index.shape[0]
+		
+		if (type(raster_data) is numpy.ndarray):
+			raster_data=raster_data.cumsum(2).cumsum(1)
 
 		#Get classes
 		tmp = list(set(y))

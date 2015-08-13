@@ -104,7 +104,7 @@ for SW in range(15, 0, -5):
 			if vector_or_image:
 				d.fit(X,y)
 			else:
-				d.fit_image(imarray.cumsum(2).cumsum(1),sample_index,y, gpu=train_gpu)
+				d.fit_image(imarray,sample_index,y, gpu=train_gpu)
 
 			stop = timeit.default_timer()
 			print(stop-start)
