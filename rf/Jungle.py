@@ -78,7 +78,7 @@ class myJungleClassifier():
 		
 		if(self.use_geodesic):
 			pan = raster_data[0]
-			Cost = nd.gaussian_gradient_magnitude(pan, a = self.geodesic_sigma)
+			Cost = nd.gaussian_gradient_magnitude(pan, self.geodesic_sigma)
 		
 		for i in range(self.n_forests):
 			print("forest : ",i," / ",self.n_forests)
@@ -90,7 +90,7 @@ class myJungleClassifier():
 					acc_per_class = forest.getFeatureImportanceByClass()
 					featureFunction.random_weight_per_class = acc_per_class
 				if(self.add_previous_prob):
-					proba = forest.predict_proba_image(raster_data,SWx,SWy)
+					proba = forest.predict_proba_image(raster_data.cumsum(2).cumsum(1),SWx,SWy)
 					if(self.use_geodesic):
 						a = self.geodesic_a
 						a = self.geodesic_b

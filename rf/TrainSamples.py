@@ -57,62 +57,10 @@ class TrainSamplesGenerator():
 			print("Classes frequencies :",self.classes_freq)
 			self.is_init = True
 
-	def getSamples(self, nb_samples=100, windows_w = 10, windows_h = 10, integral = True,  downscale = 1):
-		#TODO adapt to raster (gdal)
-		if(self.is_init and (self.data is not None) and (self.label is not None) ):
-			nb_samples = min(min(self.classes_freq),nb_samples)
-			print("nb_samples : ", nb_samples)
-			prob_classes = nb_samples*downscale*downscale / self.classes_freq
-
-			Xtmp=[]
-			ytmp=[]
-			for i in range(0,self.w_d,downscale):
-				for j in range(0,self.h_d,downscale):
-					c = self.label[i,j] 
-					c_index = self.classes_labels.index(c) if c in self.classes_labels else -1
-					if (c_index !=-1):
-						if( random.random() <= prob_classes[c_index]):
-							ytmp.append(c_index)
-							if( (windows_w == 1) and (windows_h == 1) ):
-								Xtmp.append(self.data[:,i,j])
-							else:
-								imin = max(0,i-windows_w)
-								if imin == 0:
-									imax = 2*windows_w
-								else:
-									imax = min(i+windows_w,self.w_d)
-									if imax == self.w_d:
-										imin = self.w_d-2*windows_w
-								jmin = max(0,j-windows_h)
-								if jmin == 0:
-									jmax = 2*windows_h
-								else:
-									jmax = min(j+windows_h,self.h_d)
-									if jmax == self.h_d:
-										jmin = self.h_d-2*windows_h
-								
-						
-								tt = self.data[:,imin:imax,jmin:jmax]
-								if(integral):
-									Xtmp.append(tt.cumsum(2).cumsum(1))
-								else:
-									Xtmp.append(tt)
-
-			print(np.bincount(ytmp))
-
-			nb_samples = len(ytmp)
-			if( (windows_w == 1) and (windows_h == 1) ):
-				X = np.zeros((nb_samples,self.c_d))
-			else:
-				X = np.zeros((nb_samples,self.c_d,windows_w*2,windows_h*2))
-
-			for i in range(0,nb_samples):
-				X[i] = Xtmp[i]
-			y = np.array(ytmp)
-			
-			return X,y
-		else:
-			print("An error occure during TrainSamplesGenerator initialisation")
+	def getSamples(self, nb_samples=100, windows_w = 1, windows_h = 1, integral = True,  downscale = 1):
+		sample_index,y = self.getSamplesImages(nb_samples,  downscale)
+		X = self.getSamplesData(sample_index, windows_w,  windows_h, integral)
+		return X,y
 
 	def getSamplesImages (self, nb_samples=100,  downscale = 1):
 		if(self.is_init):
@@ -122,11 +70,11 @@ class TrainSamplesGenerator():
 
 			index_tmp=[]
 			ytmp=[]
-
+			nb_samples_take = 0 * self.classes_freq
 			block_sizes = self.label_band.GetBlockSize()  
 			x_block_size = block_sizes[0]  
 			y_block_size = block_sizes[1]  
-				
+
 			xsize = self.label_band.XSize  
 			ysize = self.label_band.YSize
 
@@ -147,11 +95,13 @@ class TrainSamplesGenerator():
 							c = label_chunk[j,i]
 							c_index = self.classes_labels.index(c) if c in self.classes_labels else -1
 							if (c_index != -1):
-								if( random.random() <= prob_classes[c_index]):
+								if (random.random() <= prob_classes[c_index]) and (nb_samples_take[c_index] <= nb_samples):
 									ytmp.append(c_index)
 									index_tmp.append([j_b+j,i_b+i])
+									nb_samples_take[c_index] += 1
 
 			print(np.bincount(ytmp))
+			print("nb_samples_take",nb_samples_take)
 
 			y = np.array(ytmp)
 			index = np.array(index_tmp)
@@ -160,51 +110,82 @@ class TrainSamplesGenerator():
 		else:
 			print("An error occure during TrainSamplesGenerator initialisation")
 
-	def getAllData(self, windows_w = 10, windows_h = 10, integral = True, downscale = 1):
-
+	def getSamplesData(self, sample_index, windows_w = 1,  windows_h = 1, integral = True):
 		if(self.is_init):
-			nb_samples = (self.w_d // downscale) * (self.h_d // downscale)
-			if( (windows_w == 1) and (windows_h == 1) ):
-				X = np.zeros(nb_samples*self.c_d).reshape(nb_samples,self.c_d)
-			else:				
-				X = np.zeros(nb_samples*self.c_d*windows_w*2*windows_h*2).reshape(nb_samples,self.c_d,windows_w*2,windows_h*2)
-			print(nb_samples)
-			for i in range(0,self.w_d,downscale):
-				for j in range(0,self.h_d,downscale):
-					if( (windows_w == 1) and (windows_h == 1) ):
-						X[i] = self.data[:,i,j]					
+			raster_data = self.raster_data
+			block_sizes = raster_data.GetRasterBand(1).GetBlockSize()  
+			x_block_size = block_sizes[0]  
+			y_block_size = block_sizes[1]  
+			
+			xsize = raster_data.RasterXSize  
+			ysize = raster_data.RasterYSize
+		
+			nb_samples = len(sample_index)
+			is_single_pixel = ( windows_h == 1 ) and ( windows_w == 1)
+			if is_single_pixel :
+				X = np.zeros((nb_samples,self.c_d))
+			else:
+				X = np.zeros((nb_samples,self.c_d,windows_w, windows_h))
+			print("X.shape ",X.shape)
+			w = windows_w //2
+			h = windows_h //2
+			for i_b in range(0, xsize, x_block_size):  
+				if i_b + x_block_size < xsize:  
+					x_block_size_tmp = x_block_size
+				else:  
+					x_block_size_tmp = xsize - i_b  
+				for j_b in range(0, ysize, y_block_size):  
+					if j_b + y_block_size < ysize:  
+							y_block_size_tmp = y_block_size  
 					else:
-						imin = max(0,i-windows_w)
-						if imin == 0:
-							imax = 2*windows_w
-						else:
-							imax = min(i+windows_w,self.w_d)
-							if imax == self.w_d:
-								imin = self.w_d-2*windows_w
-						jmin = max(0,j-windows_h)
-						if jmin == 0:
-							jmax = 2*windows_h
-						else:
-							jmax = min(j+windows_h,self.h_d)
-							if jmax == self.h_d:
-								jmin = self.h_d-2*windows_h
+							y_block_size_tmp = ysize - j_b
+					
+					#Get sample in chunk
+					list_id_in_chunk = np.where(
+								(j_b - w <= sample_index[:,0]) &
+								(sample_index[:,0] < j_b + y_block_size_tmp + w) &
+								(i_b - h <= sample_index[:,1]) &
+								(sample_index[:,1] < i_b + x_block_size_tmp + h)
+							)[0]
+					#
+					if(len(list_id_in_chunk)):
+						data_chunk = raster_data.ReadAsArray(i_b, j_b, x_block_size_tmp, y_block_size_tmp)
+						for id in list_id_in_chunk:
+							j, i = sample_index[id]
+							
 
-						tt = self.data[:,imin:imax,jmin:jmax]
-						if(integral):
-							X[i] = tt.cumsum(2).cumsum(1)
-						else:
-							X[i] = tt
+							imin_image = max(0,i-w)
+							if imin_image == 0:
+								imax_image = 2*w
+							else:
+								imax_image = min(i+w,xsize)
+								if imax_image == xsize:
+									imin_image = xsize-2*w
 
-			return X
-		else:
-			print("An error occure during TrainSamplesGenerator initialisation")
-
-	def predict_image_all(self, predictor , w_x = 10, w_y = 10):
-		if(self.is_init):
-
-			if(self.data_cumul == None ):
-				self.data_cumul = self.data.cumsum(2).cumsum(1)
-
-			return predictor.predict_image(self.data_cumul, w_x, w_y)
-		else:
-			print("An error occure during TrainSamplesGenerator initialisation")
+							imin_chunk = max(0, imin_image - i_b)
+							imin_out   = max(0, i_b - imin_image)
+					
+							imax_chunk = min(x_block_size_tmp, max(1,imax_image - i_b))
+							imax_out   = imin_out + imax_chunk - imin_chunk
+					
+							jmin_image = max(0,j-h)
+							if jmin_image == 0:
+								jmax_image = 2*h
+							else:
+								jmax_image = min(j+h,ysize)
+								if jmax_image == ysize:
+									jmin_image = ysize-2*h
+					
+							jmin_chunk = max(0, jmin_image - j_b)
+							jmin_out   = max(0, j_b - jmin_image)
+					
+							jmax_chunk = min(y_block_size_tmp, max(1,jmax_image - j_b))
+							jmax_out   = jmin_out + jmax_chunk - jmin_chunk
+							if(is_single_pixel) :
+								X[id,:] = data_chunk[:,jmin_chunk,imin_chunk]
+							else :
+								X[id,:,jmin_out:jmax_out,imin_out:imax_out] = data_chunk[:,jmin_chunk:jmax_chunk,imin_chunk:imax_chunk]
+			if(is_single_pixel or (not integral) ) :
+				return X
+			else :
+				return X.cumsum(3).cumsum(2)
