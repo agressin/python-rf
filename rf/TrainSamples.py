@@ -96,7 +96,7 @@ class TrainSamplesGenerator():
 							c_index = self.classes_labels.index(c) if c in self.classes_labels else -1
 							if (c_index != -1):
 								if (random.random() <= prob_classes[c_index]) and (nb_samples_take[c_index] <= nb_samples):
-									ytmp.append(c_index)
+									ytmp.append(c)
 									index_tmp.append([j_b+j,i_b+i])
 									nb_samples_take[c_index] += 1
 

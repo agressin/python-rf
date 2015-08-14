@@ -17,8 +17,24 @@ from rf.TrainSamples import TrainSamplesGenerator
 from rf.Jungle import myJungleClassifier
 
 from osgeo import gdal
+try:
+   from sklearn.metrics import classification_report
+except ImportError:
+    pass
+   
 
 
+########################################################################
+# classification_report
+########################################################################
+def my_classification_report(array_true, array_pred, labels = None, no_data = 0):
+
+		y_true = array_true.ravel()
+		y_pred = array_pred.ravel()
+		y_pred = y_pred[y_true != no_data]
+		y_true = y_true[y_true != no_data]
+
+		return classification_report(y_true, y_pred, labels)				
 
 ########################################################################
 # Parameters
@@ -31,6 +47,7 @@ def main(argv):
 	parser.add_argument('-i', '--image', help='input image', type=str, default="data/all_crop_2.tif")
 	parser.add_argument('-l', '--label', help='input label', type=str, default="learning/OCS_TEST.tif")
 	parser.add_argument('-o', '--output', help='output dir', type=str, default="out/test_jungle")
+	parser.add_argument('-oj', '--output_jungle', help='output jungle', type=str, default="out/test_jungle.j")
 
 	parser.add_argument('-t', '--train', help='do train', action='store_true', default=False)
 	parser.add_argument('-p', '--predict', help='do predict', action='store_true', default=False)
@@ -80,7 +97,12 @@ def main(argv):
 		  output += "geoF"
 	print(output)
 	output_classif = output + ".tif"
-	output_jungle  = output + ".j"
+	
+	if args.output_jungle:
+		output_jungle = args.output_jungle
+	else:
+		output_jungle  = output + ".j"
+		
 
 	########################################################################
 	# To save pid in a tmp file
@@ -155,6 +177,11 @@ def main(argv):
 		########################################################################
 		print("Predict Jungle")
 		out = j.predict_image(array_image,SW,SW)
+
+		########################################################################
+		# classification_report
+		########################################################################
+		print(my_classification_report(array_label,out,samplor.classes_labels))
 
 		########################################################################
 		# Save ouput

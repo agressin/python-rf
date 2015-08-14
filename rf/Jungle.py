@@ -30,9 +30,11 @@ class myJungleClassifier():
 					bootstrap=True,
 					oob_score=False,
 					n_forests = 2,
+					n_step_simple = None,
+					n_step_proba  = None,
 					specialisation = None, # "global" , "per_class", ... ?
 					add_previous_prob = False,
-					fusion = None, # last_only, mean, weithed_mean ??, ... ?
+					fusion = None, # last_only, mean, mean_last_simple
 					use_geodesic = False,
 					geodesic_a = 10,
 					geodesic_b = 1,
@@ -40,6 +42,9 @@ class myJungleClassifier():
 					n_jobs=4):
 
 		self.n_forests=n_forests
+		self.n_step_simple = n_step_simple
+		self.n_step_proba = n_step_proba
+		self.geodesic_cost = None
 		
 		self.forest=myRandomForestClassifier(n_estimators,
 				max_depth,
@@ -63,8 +68,16 @@ class myJungleClassifier():
 		self.geodesic_b = geodesic_b
 		self.geodesic_sigma = geodesic_sigma
 		self.forests_ = []
+
+	def geodesic(self,proba):
+		a = self.geodesic_a
+		b = self.geodesic_b
+		for i in range(proba.shape[0]):
+			proba[i] = GDT(a*(1-proba[i]), b*self.geodesic_cost)
+			proba[i] = 1 - proba[i]/a
+		return proba
 	
-	def fit_image(self, raster_data, sample_index, y, dview = None):
+	def fit_image(self, array_data, sample_index, y, dview = None):
 		"""Build a jungle of trees from the training set (X, y)"""
 
 		#Get classes
@@ -77,51 +90,107 @@ class myJungleClassifier():
 		SWx,SWy = featureFunction.width, featureFunction.height
 		
 		if(self.use_geodesic):
-			pan = raster_data[0]
-			Cost = nd.gaussian_gradient_magnitude(pan, self.geodesic_sigma)
+			pan = array_data[0]
+			self.geodesic_cost = nd.gaussian_gradient_magnitude(pan, self.geodesic_sigma)
 		
-		for i in range(self.n_forests):
-			print("forest : ",i," / ",self.n_forests)
-			if (i != 0):
-				if(self.specialisation == 'global'):
-					acc = forest.getFeatureImportance()
-					featureFunction.random_weight = acc
-				elif(self.specialisation =='per_class'):
-					acc_per_class = forest.getFeatureImportanceByClass()
-					featureFunction.random_weight_per_class = acc_per_class
-				if(self.add_previous_prob):
-					proba = forest.predict_proba_image(raster_data,SWx,SWy)
-					if(self.use_geodesic):
-						a = self.geodesic_a
-						a = self.geodesic_b
-						for i in range(proba.shape[0]):
-							proba[i] = GDT(a*(1-proba[i]), b*Cost)
-							proba[i] = 1 - proba[i]/a 
-					featureFunction.nb_channels += proba.shape[0]
-					raster_data = numpy.concatenate((raster_data,proba))
+		if(self.n_step_simple is None and self.n_step_proba is None):
+			for i in range(self.n_forests):
+				print("forest : ",i," / ",self.n_forests)
+				if (i != 0):
+					if(self.specialisation == 'global'):
+						acc = forest.getFeatureImportance()
+						featureFunction.random_weight = acc
+					elif(self.specialisation =='per_class'):
+						acc_per_class = forest.getFeatureImportanceByClass()
+						featureFunction.random_weight_per_class = acc_per_class
+					if(self.add_previous_prob):
+						proba = forest.predict_proba_image(array_data,SWx,SWy)
+						if(self.use_geodesic):
+							proba = self.geodesic(proba)
+						featureFunction.nb_channels += proba.shape[0]
+						array_data = numpy.concatenate((array_data,proba))
 
-			forest = deepcopy(self.forest)
-			forest.featureFunction = featureFunction
-			forest.fit_image(raster_data, sample_index, y, dview)
-			forests.append(forest)
+				forest = deepcopy(self.forest)
+				forest.featureFunction = featureFunction
+				forest.fit_image(array_data, sample_index, y, dview)
+				forests.append(forest)
+		else:
+			n_forests = 0
+			for step_proba in range(self.n_step_proba):
+				for step_simple in range(self.n_step_simple):
+					if (step_simple != 0):
+						if(self.specialisation == 'global'):
+							acc = forest.getFeatureImportance()
+							featureFunction.random_weight = acc
+						elif(self.specialisation =='per_class'):
+							acc_per_class = forest.getFeatureImportanceByClass()
+							featureFunction.random_weight_per_class = acc_per_class
+						#if specialisation
+					#if step_simple !=0
+					if (step_proba != 0) and (step_simple == 0):
+						proba = forest.predict_proba_image(array_data,SWx,SWy)
+						if(self.use_geodesic):
+							proba = self.geodesic(proba)
+						#if use_geodesic
+						featureFunction.nb_channels += proba.shape[0]
+						array_data = numpy.concatenate((array_data,proba))
+					#if (step_proba != 0) and (step_simple=0):
+					forest = deepcopy(self.forest)
+					forest.featureFunction = featureFunction
+					forest.fit_image(array_data, sample_index, y, dview)
+					forests.append(forest)
+					n_forests +=1
+				#for step_simple
+			#for step_proba
+				
 		
 		# Collect newly grown Forests
 		self.forests_.extend(forests)
 
-	def predict_image(self, imarray, w_x, w_y):
+	def predict_image(self, array_data, w_x, w_y):
 		"""Predict class for X."""
-		proba = numpy.array(self.predict_proba_image(imarray, w_x, w_y))
+		proba = numpy.array(self.predict_proba_image(array_data, w_x, w_y))
 		return self.classes.take(numpy.argmax(proba, axis=0))
 
-	def predict_proba_image(self, imarray, w_x, w_y):
+	def predict_proba_image(self, array_data, w_x, w_y):
 		"""Predict class probabilities for X"""
 		all_proba = []
-		for i in range(self.n_forests):
-			if ((i != 0) and self.add_previous_prob):
-				imarray = numpy.concatenate((imarray,proba))
-			proba = self.forests_[i].predict_proba_image(imarray, w_x, w_y)
-			all_proba.append(proba)
+
+		if(self.use_geodesic):
+			pan = array_data[0]
+			self.geodesic_cost = nd.gaussian_gradient_magnitude(pan, self.geodesic_sigma)
 		
+		done = False
+		if hasattr(self, 'n_step_simple') and hasattr(self, 'n_step_proba'):
+			if(self.n_step_simple is None and self.n_step_proba is None):
+				done = False
+			else:
+				i = 0
+				done = True
+				for step_proba in range(self.n_step_proba):
+					for step_simple in range(self.n_step_simple):
+						#if step_simple !=0
+						if (step_proba != 0) and (step_simple == 0):
+							proba = self.forests_[i].predict_proba_image(array_data, w_x, w_y)
+							if(self.use_geodesic):
+								proba = self.geodesic(proba)
+							#if use_geodesic
+							featureFunction.nb_channels += proba.shape[0]
+							array_data = numpy.concatenate((array_data,proba))
+						#if (step_proba != 0) and (step_simple=0):
+						proba = self.forests_[i].predict_proba_image(array_data, w_x, w_y)
+						i +=1
+					#for step_simple
+				#for step_proba
+		if(not done):
+			for i in range(self.n_forests):
+				if ((i != 0) and self.add_previous_prob):
+					if(self.use_geodesic):
+						proba = self.geodesic(proba)
+					array_data = numpy.concatenate((array_data,proba))
+				proba = self.forests_[i].predict_proba_image(array_data, w_x, w_y)
+				all_proba.append(proba)
+
 		if(self.fusion == "mean"):
 			for j in range(1, len(all_proba)):
 				proba += all_proba[j]

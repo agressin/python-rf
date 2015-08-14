@@ -8,8 +8,11 @@ import paramiko
 import os
 import sys, getopt
 import argparse
+import csv
+import time
 
-
+global jobs_list
+jobs_list = []
 
 ########################################################################
 # ls
@@ -117,6 +120,100 @@ def get_hosts(filename_hosts):
 	return lines
 
 ########################################################################
+# get_jobs
+########################################################################
+def get_jobs(filename_jobs):
+	with open(filename_jobs) as fin:
+		reader=csv.reader(fin, skipinitialspace=True, quotechar='"',delimiter=' ')
+		keys=next(reader)
+		print(keys)
+		for row in reader:
+			job={}
+			if len(row) == len(keys):
+				for idx, val in enumerate(row):
+					job[keys[idx]] = val
+				cmd,filename = get_info_from(job)
+				job['cmd'] = cmd
+				job['run'] = False
+				job['finish'] = False
+				job['host'] = None
+				job['filename'] = filename
+				jobs_list.append(job)
+
+########################################################################
+# get_cmd_from
+########################################################################
+def get_info_from(job):
+	cmd = "cd /home/prof/iPython;"
+	cmd += "echo '"
+	cmd += "python3 -u run_jungle.py"
+
+	filename = "jungle"
+	
+	if 'image' in job:
+		cmd += " -i " + job['image']
+	if 'label' in job:
+		cmd += " -l " + job['label']
+	if 'output' in job:
+		cmd += " -o " + job['output']
+	if 'nb_samples' in job:
+		cmd += " -ns " + job['nb_samples']
+		filename += "-ns-" + job['nb_samples']
+	else:
+		filename += "-ns-500"
+	if 'windows_size' in job:
+		cmd += " -ws " + job['windows_size']
+		filename += "-ws-" + job['windows_size']
+	else:
+		filename += "-ws-50"
+	if 'nb_estimators' in job:
+		cmd += " -ne " + job['nb_estimators']
+		filename += "-ne-" + job['nb_estimators']
+	else:
+		filename += "-ne-50"
+	if 'max_features' in job:
+		cmd += " -mf " + job['max_features']
+		filename += "-mf-" + job['max_features']
+	else:
+		filename += "-mf-20"
+	if 'max_depth' in job:
+		cmd += " -md " + job['max_depth']
+		filename += "-md-" + job['max_depth']
+	else:
+		filename += "-md-5"
+	if 'nb_forests' in job:
+		cmd += " -nf " + job['nb_forests']
+		filename += "-nf-" + job['nb_forests']
+	else:
+		filename += "-nf-2"
+	if 'add_previous_prob' in job:
+		cmd += " -app "
+		filename += "-app-"
+	if 'use_geodesic' in job:
+		cmd += " -ug "
+		filename += "-ug-"
+	if 'fusion' in job:
+		cmd += " -fu " + job['fusion']
+		filename += "-fu-" + job['fusion']
+	else:
+		filename += "-fu-last"
+
+	filename += ".j"
+	cmd += " -oj /home/prof/iPython/out/" +filename
+	cmd += " --train --pid"
+	cmd += " | tee > log_jungle' > tmp.bash ;"
+	cmd += "screen -dmS compute bash tmp.bash"
+	
+	
+	return cmd,filename
+
+########################################################################
+# filter_dict_list
+########################################################################
+def filter_dict_list(dict_list,key,value):
+	return [j for j in dict_list if j[key] == value]
+
+########################################################################
 # Parameters
 ########################################################################
 
@@ -130,6 +227,7 @@ def main(argv):
 	parser.add_argument('-t', '--tail', help='Tail', type=int, default=0)
 	parser.add_argument('-tg', '--tail_grep', help='tail_grep', type=str, default="")
 	parser.add_argument('-f', '--filename_hosts', help='Hosts', type=str, default="")
+	parser.add_argument('-j', '--filename_jobs', help='Hosts', type=str, default="")
 	
 	args = parser.parse_args()
 
@@ -139,60 +237,70 @@ def main(argv):
 	tail	= args.tail
 	tail_grep	= args.tail_grep
 	filename_hosts = args.filename_hosts
+	filename_jobs = args.filename_jobs
 
-
-	#server	n_tree	max_feature	max_depth	n_forest	Fusion
-	tmp_1=[
-		["rks1012w035.ensg.eu" , "5" , "20" , "5" , "5" , "Mean"],
-		["rks1012w036.ensg.eu" , "5" , "20" , "5" , "10" , "Mean"],
-		["rks1012w037.ensg.eu" , "5" , "20" , "5" , "20" , "Mean"],
-		["rks1012w038.ensg.eu" , "10" , "20" , "5" , "5" , "Mean"],
-		["rks1012w039.ensg.eu" , "10" , "20" , "5" , "10" , "Mean"],
-		["rks1012w040.ensg.eu" , "10" , "20" , "5" , "20" , "Mean"],
-		["rks1012w041.ensg.eu" , "20" , "20" , "5" , "5" , "Mean"],
-		["rks1012w042.ensg.eu" , "20" , "20" , "5" , "10" , "Mean"],
-		["rks1012w043.ensg.eu" , "20" , "20" , "5" , "20" , "Mean"],
-		["rks1012w044.ensg.eu" , "5" , "200" , "5" , "5" , "Mean"],
-		["rks1012w067.ensg.eu" , "5" , "200" , "5" , "10" , "Mean"],
-		["rks1012w069.ensg.eu" , "5" , "200" , "5" , "20" , "Mean"],
-		["rks1012w070.ensg.eu" , "10" , "200" , "5" , "5" , "Mean"],
-		["rks1012w071.ensg.eu" , "10" , "200" , "5" , "10" , "Mean"],
-		["rks1012w072.ensg.eu" , "10" , "200" , "5" , "20" , "Mean"],
-		["rks1012w073.ensg.eu" , "20" , "200" , "5" , "5" , "Mean"],
-		["rks1012w075.ensg.eu" , "20" , "200" , "5" , "10" , "Mean"],
-		["rks1012w076.ensg.eu" , "20" , "200" , "5" , "20" , "Mean"]
-	]
-	tmp_2=[
-		["rks1012w035.ensg.eu" , "50"  , "5" , "5"  , "2"  , "Mean"],
-		["rks1012w036.ensg.eu" , "50"  , "5" , "10" , "2" , "Mean"],
-		["rks1012w037.ensg.eu" , "50"  , "5" , "5"  , "4" , "Mean"],
-		["rks1012w038.ensg.eu" , "50"  , "5" , "10" , "4"  , "Mean"],
-		["rks1012w039.ensg.eu" , "100" , "5" , "5"  , "2" , "Mean"],
-		["rks1012w040.ensg.eu" , "100" , "5" , "10" , "2" , "Mean"],
-		["rks1012w041.ensg.eu" , "100" , "5" , "5"  , "4"  , "Mean"],
-		["rks1012w042.ensg.eu" , "100" , "5" , "10" , "4" , "Mean"],
-		["rks1012w043.ensg.eu" , "50"  , "10", "5"  , "2" , "Mean"],
-		["rks1012w044.ensg.eu" , "50"  , "10", "10" , "2"  , "Mean"],
-		["rks1012w045.ensg.eu" , "50"  , "5" , "5"  , "1" , "Mean"],################
-		["rks1012w067.ensg.eu" , "50"  , "10", "5"  , "4" , "Mean"],
-		["rks1012w069.ensg.eu" , "50"  , "10", "10" , "4" , "Mean"],
-		["rks1012w070.ensg.eu" , "100" , "10", "5"  , "2"  , "Mean"],
-		["rks1012w071.ensg.eu" , "100" , "10", "10" , "2" , "Mean"],
-		["rks1012w072.ensg.eu" , "100" , "10", "5"  , "4" , "Mean"],
-		["rks1012w073.ensg.eu" , "100" , "10", "10" , "4"  , "Mean"]
-	]
-
-	all_params = tmp_2
+	#all_params = tmp_1
 	ssh = paramiko.SSHClient()
 	ssh.load_host_keys(os.path.expanduser(os.path.join("~", ".ssh", "known_hosts")))
 	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+	
+	if args.filename_jobs and args.filename_hosts:
 
-	if args.filename_hosts:
-		hosts = get_hosts(filename_hosts)
-		hosts_free = [h for h in hosts if not is_busy(ssh,h)]
-		print(hosts_free)
-		exit()
+		get_jobs(filename_jobs)
+		#print(jobs_list)
+		#tt = filter_dict_list(jobs_list,'n_tree','5')
+		hosts_list = get_hosts(filename_hosts)
+		#print(hosts)
+		#hosts_free = [h for h in hosts if not is_busy(ssh,h)]
+		#print(hosts_free)
+		is_finish = False
+		while not is_finish:
+			#1/ lancer jobs sur host free
+			print("1/ lancer jobs sur host free")
+			hosts_free = [h for h in hosts_list if not is_busy(ssh,h)]
+			print("Get ",len(hosts_free),"free hosts")
+			for h in hosts_free:
+				print(h)
+				for j in jobs_list:
+					if j['host'] is None:
+						j['host'] = h
+						j['run'] = True
+						ssh.connect(h, username="prof")
+						sftp = ssh.open_sftp()
+						sftp.put("run_jungle.py", "/home/prof/iPython/run_jungle.py")
+						cmd = j['cmd']
+						ssh.exec_command(cmd)
+						print(h,cmd)
+						ssh.exec_command(cmd)
+						sftp.close()
+						ssh.close()
+						break
 
+			#2/ recuperer les fichiers finis
+			print("2/ recuperer les fichiers finis")
+			still_some_job = False
+			for j in jobs_list:
+				if j['run'] and j['host'] is not None:
+					filename = j['filename']
+					ssh.connect(j['host'], username="prof")
+					if ssh_ls(ssh,filename,False):
+						j['run'] = False
+						sftp = ssh.open_sftp()
+						ssh_get(ssh,'/home/prof/iPython/out/'+filename,'/home/agressin/tt/'+filename)
+						sftp.close()
+						j['finish'] = True
+					else:
+						still_some_job = True
+						print(filename,"still running on ",j['host'])
+					ssh.close()
+			is_finish = not still_some_job
+			#3/ compute classif + rapport en local
+			#TODO
+			
+			#On attend 10 min avant l'étape suivante
+			time.sleep(60*10)
+
+	exit()
 	for param in all_params:
 		print(param[0])
 	
