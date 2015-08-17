@@ -46,23 +46,24 @@ def main(argv):
 
 	parser.add_argument('-i', '--image', help='input image', type=str, default="data/all_crop_2.tif")
 	parser.add_argument('-l', '--label', help='input label', type=str, default="learning/OCS_TEST.tif")
-	parser.add_argument('-o', '--output', help='output dir', type=str, default="out/test_jungle")
-	parser.add_argument('-oj', '--output_jungle', help='output jungle', type=str, default="out/test_jungle.j")
+	parser.add_argument('-o', '--output', help='output dir', type=str, default="out/jungle")
+	parser.add_argument('-oj', '--output_jungle', help='output jungle', type=str, default="")
 
 	parser.add_argument('-t', '--train', help='do train', action='store_true', default=False)
 	parser.add_argument('-p', '--predict', help='do predict', action='store_true', default=False)
 	
-	parser.add_argument('-ns', '--nb_samples', help='nb_samples', type=int, default=500)
-	parser.add_argument('-ws', '--windows_size', help='windows_size', type=int, default=50)
-	parser.add_argument('-ne', '--nb_estimators', help='nb_estimators', type=int, default=50)
-	parser.add_argument('-mf', '--max_features', help='max_features', type=int, default=20)
-	parser.add_argument('-md', '--max_depth', help='max_depth', type=int, default=5)
-	parser.add_argument('-mss', '--min_samples_split', help='min_samples_split', type=int, default=10)
-	parser.add_argument('-msl', '--min_samples_leaf', help='min_samples_leaf', type=int, default=5)
-	parser.add_argument('-nf', '--nb_forests', help='nb_forests', type=int, default=2)
-	parser.add_argument('-app', '--add_previous_prob', help='add previous proba', action='store_true', default=False)
-	parser.add_argument('-ug', '--use_geodesic', help='use geodesic proba', action='store_true', default=False)
-	parser.add_argument('-fu', '--fusion', help='fusion [None (last only), mean]', type=str, default=None)
+	parser.add_argument('-ns', '--nb_samples', help='nb_samples (default is 500)', type=int, default=500)
+	parser.add_argument('-ws', '--windows_size', help='windows_size (default is 50)', type=int, default=50)
+	parser.add_argument('-ne', '--nb_estimators', help='nb_estimators (default is 50)', type=int, default=50)
+	parser.add_argument('-mf', '--max_features', help='max_features (default is 20)', type=int, default=20)
+	parser.add_argument('-md', '--max_depth', help='max_depth (default is 5)', type=int, default=5)
+	parser.add_argument('-mss', '--min_samples_split', help='min_samples_split (default is 10)', type=int, default=10)
+	parser.add_argument('-msl', '--min_samples_leaf', help='min_samples_leaf (default is 5)', type=int, default=5)
+	parser.add_argument('-nf', '--nb_forests', help='nb_forests (default is 1)', type=int, default=1)
+	parser.add_argument('-sp', '--specialisation', help='specialisation [none, global, per_class] (default is none)', choices=['none', 'global', 'per_class'], default='none')
+	parser.add_argument('-app', '--add_previous_prob', help='add previous proba (default is False)', action='store_true', default=False)
+	parser.add_argument('-ug', '--use_geodesic', help='use geodesic proba (default is False)', action='store_true', default=False)
+	parser.add_argument('-fu', '--fusion', help='fusion [last, mean] (default is last)', choices=['last', 'mean'], default='last')
 	
 	parser.add_argument('-pid', '--pid', help='to save pid in a file', action='store_true', default=False)
 	
@@ -84,26 +85,42 @@ def main(argv):
 
 	n_forests 				= args.nb_forests
 	fusion 						= args.fusion # last_only, mean, weithed_mean ??, ... ?
-	specialisation 		= None, # "global" , "per_class", ... ?
+	specialisation 		= args.specialisation, # "none," "global" , "per_class", ... ?
 	add_previous_prob = args.add_previous_prob
 	use_geodesic 			= args.use_geodesic
-
 
 	verbose=2
 	n_jobs=-1
 
-	output+="-"+str(n_samples)+"-"+str(n_estimators)+"-"+str(max_features)+"-"+str(max_depth)+"-"+str(SW)+"-"+str(n_forests)
+	output += "jungle"
+	output += "-ns-" + str(n_samples)
+	output += "-ws-" + str(SW)
+	output += "-ne-" + str(n_estimators)
+	output += "-mf-" + str(max_features)
+	output += "-md-" + str(max_depth)
+	output += "-nf-" + str(n_forests)
+
+	if add_previous_prob :
+		output += "-app"
+	if use_geodesic:
+		output += "-ug"
+		
+	output += "-fu-" + fusion
+
+
+	#output+="-"+str(n_samples)+"-"+str(n_estimators)+"-"+str(max_features)+"-"+str(max_depth)+"-"+str(SW)+"-"+str(n_forests)
 	if(use_geodesic):
-		  output += "geoF"
-	print(output)
-	output_classif = output + ".tif"
-	
+		output += "geoF"	
+		
 	if args.output_jungle:
 		output_jungle = args.output_jungle
+		output_classif = output_jungle + ".tif"
 	else:
 		output_jungle  = output + ".j"
-		
-
+		output_classif = output + ".tif"
+	
+	print(output_jungle)
+	
 	########################################################################
 	# To save pid in a tmp file
 	########################################################################
@@ -133,10 +150,16 @@ def main(argv):
 
 	nbChannels, sizeX, sizeY = array_image.shape
 
+	########################################################################
+	# Compute some stats
+	########################################################################
+
+	samplor = TrainSamplesGenerator(raster_image,raster_label)
+
 	j = None
 	if args.train :
 		########################################################################
-		# Compute some stats and get random learning data
+		# Get random learning data
 		########################################################################
 
 		samplor = TrainSamplesGenerator(raster_image,raster_label)
@@ -181,7 +204,10 @@ def main(argv):
 		########################################################################
 		# classification_report
 		########################################################################
-		print(my_classification_report(array_label,out,samplor.classes_labels))
+		report = my_classification_report(array_label,out,samplor.classes_labels)
+		print(report)
+		with open(output_jungle +".txt","a+") as fin:
+			fin.write(report)
 
 		########################################################################
 		# Save ouput

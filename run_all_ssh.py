@@ -18,7 +18,7 @@ jobs_list = []
 # ls
 ########################################################################
 def ssh_ls(ssh,filename,show=True):
-		stdin, stdout, stderr = ssh.exec_command('ls -l ' + filename)
+		stdin, stdout, stderr = ssh.exec_command('ls ' + filename)
 		exist = False
 		for line in stdout:
 			if(show):
@@ -86,6 +86,26 @@ def ssh_get(ssh,filename_dist,filename_local):
 		if(not dist and not local):
 			print("Still waiting for : ",filename_dist)
 
+########################################################################
+# get
+########################################################################
+def ssh_get_all(ssh,filename_dist,filename_local):
+
+		stdin, stdout, stderr = ssh.exec_command('ls ' + filename_dist)
+		exist = False
+		for line in stdout:
+			dist = line[:-1]
+
+			local = filename_local + dist[23:]
+			if( not os.path.isfile(local) ):
+				sftp = ssh.open_sftp()
+				print(dist)
+				print(local)
+				sftp.get(dist,local,progress)
+				sftp.close()
+			else :
+				print("Already have : ", local)
+			
 ########################################################################
 # is_busy
 ########################################################################
@@ -186,12 +206,17 @@ def get_info_from(job):
 		filename += "-nf-" + job['nb_forests']
 	else:
 		filename += "-nf-2"
+	if 'specialisation' in job:
+		cmd += " -sp " + job['specialisation']
+		filename += "-sp-" + job['specialisation']
+	else:
+		filename += "-sp-none"		
 	if 'add_previous_prob' in job:
 		cmd += " -app "
-		filename += "-app-"
+		filename += "-app"
 	if 'use_geodesic' in job:
 		cmd += " -ug "
-		filename += "-ug-"
+		filename += "-ug"
 	if 'fusion' in job:
 		cmd += " -fu " + job['fusion']
 		filename += "-fu-" + job['fusion']
@@ -226,7 +251,7 @@ def main(argv):
 	parser.add_argument('-l', '--ls', help='ls', action='store_true', default=False)
 	parser.add_argument('-t', '--tail', help='Tail', type=int, default=0)
 	parser.add_argument('-tg', '--tail_grep', help='tail_grep', type=str, default="")
-	parser.add_argument('-f', '--filename_hosts', help='Hosts', type=str, default="")
+	parser.add_argument('-f', '--filename_hosts', help='Hosts', type=str, required=True)
 	parser.add_argument('-j', '--filename_jobs', help='Hosts', type=str, default="")
 	
 	args = parser.parse_args()
@@ -244,15 +269,42 @@ def main(argv):
 	ssh.load_host_keys(os.path.expanduser(os.path.join("~", ".ssh", "known_hosts")))
 	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 	
-	if args.filename_jobs and args.filename_hosts:
+	hosts_list = get_hosts(filename_hosts)
+	#hosts_free = [h for h in hosts if not is_busy(ssh,h)]
+	#print(hosts_free)
+
+	if ls :
+		for h in hosts_list:
+			ssh.connect(h, username="prof")
+			ssh_ls(ssh,'/home/prof/iPython/out/jungle*.j')
+			ssh.close()
+
+
+	if tail or tail_grep :		
+		for h in hosts_list:
+			ssh.connect(h, username="prof")
+			
+			#On test si le fichier existe sur le dist
+			if( not ssh_ls('/home/prof/iPython/out/'+filename,False) ):
+				print("Still waiting for :" ,filename)
+				ssh_tail(ssh,"/home/prof/iPython/log_jungle",tail,tail_grep)
+
+			ssh.close()
+			
+	if get :
+		for h in hosts_list:
+			ssh.connect(h, username="prof")
+			ssh_get_all(ssh,'/home/prof/iPython/out/jungle*.j','/home/agressin/tt/')
+			ssh.close()
+		
+	if run :
+	
+		if not args.filename_jobs :
+			print("No file jobs")
+			exit()
 
 		get_jobs(filename_jobs)
-		#print(jobs_list)
-		#tt = filter_dict_list(jobs_list,'n_tree','5')
-		hosts_list = get_hosts(filename_hosts)
-		#print(hosts)
-		#hosts_free = [h for h in hosts if not is_busy(ssh,h)]
-		#print(hosts_free)
+
 		is_finish = False
 		while not is_finish:
 			#1/ lancer jobs sur host free
