@@ -23,6 +23,25 @@ except ImportError:
     pass
    
 
+#TODO ??
+#######################################################################
+# Use iPython Parallel
+# Needs to load cluster before :
+# ipcluster start -n 28 --profile=nbserver
+#######################################################################
+#dview = None
+#if(use_ipython_parallel):
+#	print("iPython parallel")
+#	from IPython.parallel import Client
+#	c = Client(profile='nbserver')
+#	print(c.ids)
+#	dview = c.load_balanced_view()
+#else:
+#	print("no iPython parallel")
+#
+#To use it : j.fit_image(array_image,sample_index, y, dview=dview)
+
+
 
 ########################################################################
 # classification_report
@@ -69,6 +88,10 @@ def main(argv):
 	parser.add_argument('-pid', '--pid', help='to save pid in a file', action='store_true', default=False)
 	
 	args = parser.parse_args()
+
+	if len(sys.argv) <= 1 :
+		parser.print_help()
+		exit()
 
 	input_image 			= args.image
 	input_label 			= args.label

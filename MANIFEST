@@ -10,3 +10,5 @@ rf/Splitter.py
 rf/TrainSamples.py
 rf/__init__.py
 rf/tree.py
+scripts/run_all_jungles.py
+scripts/run_jungle.py

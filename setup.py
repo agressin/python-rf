@@ -17,10 +17,11 @@ extensions = [
 
 setup(
     name='rf',
-    version='1.9',
+    version='2.0',
     cmdclass = {'build_ext':build_ext},
     ext_modules = extensions,
-    py_modules=['rf','rf.Splitter', 'rf.Criterion', 'rf.FeatureFunction', 'rf.TrainSamples', 'rf.Forest', 'rf.DecisionTree', 'rf.tree', 'rf.Jungle']
+    py_modules=['rf','rf.Splitter', 'rf.Criterion', 'rf.FeatureFunction', 'rf.TrainSamples', 'rf.Forest', 'rf.DecisionTree', 'rf.tree', 'rf.Jungle'],
+    scripts=['scripts/run_jungle.py', 'scripts/run_all_jungles.py']
 )
 
 

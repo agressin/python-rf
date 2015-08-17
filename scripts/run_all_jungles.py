@@ -19,21 +19,21 @@ def ssh_ls(ssh,filename,show=True):
 			if(show):
 				print(line)
 			exist = True
-		
+
 		return exist
 
 ########################################################################
 # tail
 ########################################################################
 def ssh_tail(ssh,filename, tail = 0, grep = ""):
-	
+
 	if grep:
 		cmd="cat "
 	else:
 		cmd="tail "
 		if tail:
 			cmd += "-n "+ str(tail)
-	
+
 	cmd += " "+ filename +" "
 	if grep:
 		cmd += "| grep " + grep
@@ -51,13 +51,13 @@ def progress(val, valmax):
 	# format
 	if val > valmax: val = valmax
 
-	maxbar=100    
+	maxbar=100
 	# process
 	perc  = round((float(val) / float(valmax)) * 100)
 	scale = 100.0 / float(maxbar)
 	bar   = int(perc / scale)
 
-	# render 
+	# render
 	out = '\r Progress [%s%s] %3d %%' % ('=' * bar, ' ' * (maxbar - bar), perc)
 	sys.stdout.write(out)
 
@@ -77,7 +77,7 @@ def ssh_get(ssh,filename_dist,filename_local):
 			sftp.close()
 		if local:
 			print("Already have : ",filename_local)
-			
+
 		if(not dist and not local):
 			print("Still waiting for : ",filename_dist)
 
@@ -100,7 +100,7 @@ def ssh_get_all(ssh,filename_dist,filename_local):
 				sftp.close()
 			else :
 				print("Already have : ", local)
-			
+
 ########################################################################
 # is_busy
 ########################################################################
@@ -120,7 +120,7 @@ def is_busy(ssh,host,username="prof",show = True):
 		if not busy : #tmp.pif exist but process don't exist anymore
 			print(host, "rm "+pid)
 			ssh.exec_command("rm "+pid)
-			
+
 	return busy
 
 ########################################################################
@@ -132,7 +132,8 @@ def get_hosts(filename_hosts):
 		with open(filename_hosts) as f:
 			lines = f.read().splitlines()
 			lines = list(filter(None, lines))
-			
+			lines = filter(lambda row: row[0]!='#', lines)
+
 	return lines
 
 ########################################################################
@@ -140,7 +141,7 @@ def get_hosts(filename_hosts):
 ########################################################################
 def get_jobs(filename_jobs,local = False):
 	with open(filename_jobs) as fin:
-		reader=csv.reader(fin, skipinitialspace=True, quotechar='"',delimiter=' ')
+		reader=csv.reader(filter(lambda row: row[0]!='#', fin), skipinitialspace=True, quotechar='"',delimiter=' ')
 		keys=next(reader)
 		print(keys)
 		for row in reader:
@@ -166,11 +167,11 @@ def get_info_from(job,local):
 		cmd += "echo '"
 		cmd += "python3 -u run_jungle.py"
 	else :
-		cmd = "./run_jungle.py"
-	
-	
+		cmd = "run_jungle.py"
+
+
 	filename = "jungle"
-	
+
 	if 'image' in job:
 		cmd += " -i " + job['image']
 	if 'label' in job:
@@ -211,13 +212,15 @@ def get_info_from(job,local):
 		cmd += " -sp " + job['specialisation']
 		filename += "-sp-" + job['specialisation']
 	else:
-		filename += "-sp-none"		
+		filename += "-sp-none"
 	if 'add_previous_prob' in job:
-		cmd += " -app "
-		filename += "-app"
+		if job['specialisation'] == "1" or job['specialisation'] == "True":
+			cmd += " -app "
+			filename += "-app"
 	if 'use_geodesic' in job:
-		cmd += " -ug "
-		filename += "-ug"
+		if job['use_geodesic'] == "1" or job['use_geodesic'] == "True":
+			cmd += " -ug "
+			filename += "-ug"
 	if 'fusion' in job:
 		cmd += " -fu " + job['fusion']
 		filename += "-fu-" + job['fusion']
@@ -229,9 +232,9 @@ def get_info_from(job,local):
 		cmd += " -oj out/" +filename
 	else :
 		cmd += " -oj /home/prof/iPython/out/" +filename
-	
+
 	cmd += " --train "
-	
+
 	if not local:
 		cmd += " --pid "
 		cmd += " | tee > log_jungle' > tmp.bash ;"
@@ -260,8 +263,12 @@ def main(argv):
 	parser.add_argument('-tg', '--tail_grep', help='tail_grep', type=str, default="")
 	parser.add_argument('-f', '--filename_hosts', help='Hosts', type=str, default="")
 	parser.add_argument('-j', '--filename_jobs', help='Hosts', type=str, default="")
-	
+
 	args = parser.parse_args()
+
+	if len(sys.argv) <= 1 :
+		parser.print_help()
+		exit()
 
 	run		= args.run
 	get		= args.get
@@ -275,7 +282,7 @@ def main(argv):
 	ssh = paramiko.SSHClient()
 	ssh.load_host_keys(os.path.expanduser(os.path.join("~", ".ssh", "known_hosts")))
 	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-	
+
 	hosts_list = get_hosts(filename_hosts)
 	#hosts_free = [h for h in hosts if not is_busy(ssh,h)]
 	#print(hosts_free)
@@ -284,30 +291,27 @@ def main(argv):
 		print("ssh")
 		if ls :
 			for h in hosts_list:
+				print(h)
 				ssh.connect(h, username="prof")
 				ssh_ls(ssh,'/home/prof/iPython/out/jungle*.j')
 				ssh.close()
 
 
-		if tail or tail_grep :		
+		if tail or tail_grep :
 			for h in hosts_list:
-				ssh.connect(h, username="prof")
-			
-				#On test si le fichier existe sur le dist
-				if( not ssh_ls('/home/prof/iPython/out/'+filename,False) ):
-					print("Still waiting for :" ,filename)
+				if is_busy(ssh,h):
+					ssh.connect(h, username="prof")
 					ssh_tail(ssh,"/home/prof/iPython/log_jungle",tail,tail_grep)
+					ssh.close()
 
-				ssh.close()
-			
 		if get :
 			for h in hosts_list:
 				ssh.connect(h, username="prof")
 				ssh_get_all(ssh,'/home/prof/iPython/out/jungle*.j','/home/agressin/tt/')
 				ssh.close()
-		
+
 		if run :
-	
+
 			if not args.filename_jobs :
 				print("No file jobs")
 				exit()
@@ -330,7 +334,6 @@ def main(argv):
 							sftp = ssh.open_sftp()
 							sftp.put("run_jungle.py", "/home/prof/iPython/run_jungle.py")
 							cmd = j['cmd']
-							ssh.exec_command(cmd)
 							print(h,cmd)
 							ssh.exec_command(cmd)
 							sftp.close()
@@ -357,7 +360,7 @@ def main(argv):
 				is_finish = not still_some_job
 				#3/ compute classif + rapport en local
 				#TODO
-			
+
 				#On attend 10 min avant l'étape suivante
 				time.sleep(60*10)
 			#while
@@ -371,9 +374,9 @@ def main(argv):
 				cmd = j['cmd']
 				print(cmd)
 				subprocess.call(cmd, shell=True)
-				
-			
-		
+
+
+
 
 
 ########################################################################
