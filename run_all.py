@@ -4,12 +4,7 @@
 @author: agressin
 """
 
-import paramiko
-import os
-import sys, getopt
-import argparse
-import csv
-import time
+import paramiko, os, sys, getopt, argparse, csv,time, subprocess
 
 global jobs_list
 jobs_list = []
@@ -132,17 +127,18 @@ def is_busy(ssh,host,username="prof",show = True):
 # get_hosts
 ########################################################################
 def get_hosts(filename_hosts):
+	lines = ""
 	if(os.path.isfile(filename_hosts)):
 		with open(filename_hosts) as f:
 			lines = f.read().splitlines()
+			lines = list(filter(None, lines))
 			
-	lines = list(filter(None, lines))
 	return lines
 
 ########################################################################
 # get_jobs
 ########################################################################
-def get_jobs(filename_jobs):
+def get_jobs(filename_jobs,local = False):
 	with open(filename_jobs) as fin:
 		reader=csv.reader(fin, skipinitialspace=True, quotechar='"',delimiter=' ')
 		keys=next(reader)
@@ -152,7 +148,7 @@ def get_jobs(filename_jobs):
 			if len(row) == len(keys):
 				for idx, val in enumerate(row):
 					job[keys[idx]] = val
-				cmd,filename = get_info_from(job)
+				cmd,filename = get_info_from(job,local)
 				job['cmd'] = cmd
 				job['run'] = False
 				job['finish'] = False
@@ -163,11 +159,16 @@ def get_jobs(filename_jobs):
 ########################################################################
 # get_cmd_from
 ########################################################################
-def get_info_from(job):
-	cmd = "cd /home/prof/iPython;"
-	cmd += "echo '"
-	cmd += "python3 -u run_jungle.py"
+def get_info_from(job,local):
 
+	if not local:
+		cmd = "cd /home/prof/iPython;"
+		cmd += "echo '"
+		cmd += "python3 -u run_jungle.py"
+	else :
+		cmd = "./run_jungle.py"
+	
+	
 	filename = "jungle"
 	
 	if 'image' in job:
@@ -224,12 +225,18 @@ def get_info_from(job):
 		filename += "-fu-last"
 
 	filename += ".j"
-	cmd += " -oj /home/prof/iPython/out/" +filename
-	cmd += " --train --pid"
-	cmd += " | tee > log_jungle' > tmp.bash ;"
-	cmd += "screen -dmS compute bash tmp.bash"
+	if local :
+		cmd += " -oj out/" +filename
+	else :
+		cmd += " -oj /home/prof/iPython/out/" +filename
 	
+	cmd += " --train "
 	
+	if not local:
+		cmd += " --pid "
+		cmd += " | tee > log_jungle' > tmp.bash ;"
+		cmd += "screen -dmS compute bash tmp.bash"
+
 	return cmd,filename
 
 ########################################################################
@@ -251,7 +258,7 @@ def main(argv):
 	parser.add_argument('-l', '--ls', help='ls', action='store_true', default=False)
 	parser.add_argument('-t', '--tail', help='Tail', type=int, default=0)
 	parser.add_argument('-tg', '--tail_grep', help='tail_grep', type=str, default="")
-	parser.add_argument('-f', '--filename_hosts', help='Hosts', type=str, required=True)
+	parser.add_argument('-f', '--filename_hosts', help='Hosts', type=str, default="")
 	parser.add_argument('-j', '--filename_jobs', help='Hosts', type=str, default="")
 	
 	args = parser.parse_args()
@@ -273,125 +280,101 @@ def main(argv):
 	#hosts_free = [h for h in hosts if not is_busy(ssh,h)]
 	#print(hosts_free)
 
-	if ls :
-		for h in hosts_list:
-			ssh.connect(h, username="prof")
-			ssh_ls(ssh,'/home/prof/iPython/out/jungle*.j')
-			ssh.close()
-
-
-	if tail or tail_grep :		
-		for h in hosts_list:
-			ssh.connect(h, username="prof")
-			
-			#On test si le fichier existe sur le dist
-			if( not ssh_ls('/home/prof/iPython/out/'+filename,False) ):
-				print("Still waiting for :" ,filename)
-				ssh_tail(ssh,"/home/prof/iPython/log_jungle",tail,tail_grep)
-
-			ssh.close()
-			
-	if get :
-		for h in hosts_list:
-			ssh.connect(h, username="prof")
-			ssh_get_all(ssh,'/home/prof/iPython/out/jungle*.j','/home/agressin/tt/')
-			ssh.close()
-		
-	if run :
-	
-		if not args.filename_jobs :
-			print("No file jobs")
-			exit()
-
-		get_jobs(filename_jobs)
-
-		is_finish = False
-		while not is_finish:
-			#1/ lancer jobs sur host free
-			print("1/ lancer jobs sur host free")
-			hosts_free = [h for h in hosts_list if not is_busy(ssh,h)]
-			print("Get ",len(hosts_free),"free hosts")
-			for h in hosts_free:
-				print(h)
-				for j in jobs_list:
-					if j['host'] is None:
-						j['host'] = h
-						j['run'] = True
-						ssh.connect(h, username="prof")
-						sftp = ssh.open_sftp()
-						sftp.put("run_jungle.py", "/home/prof/iPython/run_jungle.py")
-						cmd = j['cmd']
-						ssh.exec_command(cmd)
-						print(h,cmd)
-						ssh.exec_command(cmd)
-						sftp.close()
-						ssh.close()
-						break
-
-			#2/ recuperer les fichiers finis
-			print("2/ recuperer les fichiers finis")
-			still_some_job = False
-			for j in jobs_list:
-				if j['run'] and j['host'] is not None:
-					filename = j['filename']
-					ssh.connect(j['host'], username="prof")
-					if ssh_ls(ssh,filename,False):
-						j['run'] = False
-						sftp = ssh.open_sftp()
-						ssh_get(ssh,'/home/prof/iPython/out/'+filename,'/home/agressin/tt/'+filename)
-						sftp.close()
-						j['finish'] = True
-					else:
-						still_some_job = True
-						print(filename,"still running on ",j['host'])
-					ssh.close()
-			is_finish = not still_some_job
-			#3/ compute classif + rapport en local
-			#TODO
-			
-			#On attend 10 min avant l'étape suivante
-			time.sleep(60*10)
-
-	exit()
-	for param in all_params:
-		print(param[0])
-	
-		ssh.connect(param[0], username="prof")
-		sftp = ssh.open_sftp()
-		
-		filename = "test_jungle-500-"+ param[1] +"-"+ param[2] +"-"+ param[3] +"-50-"+ param[4] +".j"
-		
-		if run :
-
-			sftp.put("run_jungle.py", "/home/prof/iPython/run_jungle.py")
-			cmd = "cd /home/prof/iPython;"
-			cmd += "echo '"
-			cmd += "python3 -u run_jungle.py"
-			cmd += " -ne " + param[1]
-			cmd += " -mf " + param[2]
-			cmd += " -md " + param[3]
-			cmd += " -nf " + param[4]
-			cmd += " -fu " + param[5]
-			cmd += " --train --pid"
-			cmd += " | tee > log_jungle' > tmp.bash ;"
-			cmd += "screen -dmS compute bash tmp.bash"
-			print(cmd)
-			ssh.exec_command(cmd)
-	
+	if args.filename_hosts:
+		print("ssh")
 		if ls :
-			ssh_ls(ssh,'/home/prof/iPython/out/test_jungle-500*.j')
+			for h in hosts_list:
+				ssh.connect(h, username="prof")
+				ssh_ls(ssh,'/home/prof/iPython/out/jungle*.j')
+				ssh.close()
+
 
 		if tail or tail_grep :		
-			#On test si le fichier existe sur le dist
-			if( not ssh_ls(ssh,'/home/prof/iPython/out/'+filename,False) ):
-				print("Still waiting for :" ,filename)
-				ssh_tail(ssh,"/home/prof/iPython/log_jungle",tail,tail_grep)
+			for h in hosts_list:
+				ssh.connect(h, username="prof")
+			
+				#On test si le fichier existe sur le dist
+				if( not ssh_ls('/home/prof/iPython/out/'+filename,False) ):
+					print("Still waiting for :" ,filename)
+					ssh_tail(ssh,"/home/prof/iPython/log_jungle",tail,tail_grep)
+
+				ssh.close()
 			
 		if get :
-			ssh_get(ssh,'/home/prof/iPython/out/'+filename,'/home/agressin/tt/'+filename)
+			for h in hosts_list:
+				ssh.connect(h, username="prof")
+				ssh_get_all(ssh,'/home/prof/iPython/out/jungle*.j','/home/agressin/tt/')
+				ssh.close()
+		
+		if run :
+	
+			if not args.filename_jobs :
+				print("No file jobs")
+				exit()
 
-		sftp.close()
-		ssh.close()
+			get_jobs(filename_jobs,local=False)
+
+			is_finish = False
+			while not is_finish:
+				#1/ lancer jobs sur host free
+				print("1/ lancer jobs sur host free")
+				hosts_free = [h for h in hosts_list if not is_busy(ssh,h)]
+				print("Get ",len(hosts_free),"free hosts")
+				for h in hosts_free:
+					print(h)
+					for j in jobs_list:
+						if j['host'] is None:
+							j['host'] = h
+							j['run'] = True
+							ssh.connect(h, username="prof")
+							sftp = ssh.open_sftp()
+							sftp.put("run_jungle.py", "/home/prof/iPython/run_jungle.py")
+							cmd = j['cmd']
+							ssh.exec_command(cmd)
+							print(h,cmd)
+							ssh.exec_command(cmd)
+							sftp.close()
+							ssh.close()
+							break
+
+				#2/ recuperer les fichiers finis
+				print("2/ recuperer les fichiers finis")
+				still_some_job = False
+				for j in jobs_list:
+					if j['run'] and j['host'] is not None:
+						filename = j['filename']
+						ssh.connect(j['host'], username="prof")
+						if ssh_ls(ssh,filename,False):
+							j['run'] = False
+							sftp = ssh.open_sftp()
+							ssh_get(ssh,'/home/prof/iPython/out/'+filename,'/home/agressin/tt/'+filename)
+							sftp.close()
+							j['finish'] = True
+						else:
+							still_some_job = True
+							print(filename,"still running on ",j['host'])
+						ssh.close()
+				is_finish = not still_some_job
+				#3/ compute classif + rapport en local
+				#TODO
+			
+				#On attend 10 min avant l'étape suivante
+				time.sleep(60*10)
+			#while
+		#run
+	else :
+		print("local")
+		#run locally
+		if run :
+			get_jobs(filename_jobs,local=True)
+			for j in jobs_list:
+				cmd = j['cmd']
+				print(cmd)
+				subprocess.call(cmd, shell=True)
+				
+			
+		
+
 
 ########################################################################
 # Main
