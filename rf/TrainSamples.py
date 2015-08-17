@@ -100,7 +100,7 @@ class TrainSamplesGenerator():
 									index_tmp.append([j_b+j,i_b+i])
 									nb_samples_take[c_index] += 1
 
-			print(np.bincount(ytmp))
+			#print(np.bincount(ytmp))
 			print("nb_samples_take",nb_samples_take)
 
 			y = np.array(ytmp)

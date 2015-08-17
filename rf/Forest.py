@@ -141,9 +141,9 @@ class myRandomForestClassifier():
 		n_samples = X.shape[0]
 
 		#Get classes
-		tmp = list(set(y))
-		self.classes = numpy.array(tmp)
-		self.n_classes = len(tmp)
+		classes, y[:] = numpy.unique(y[:], return_inverse=True)
+		self.classes_ = classes
+		self.n_classes_ = classes.shape[0]
 
 		self.y = y
 
@@ -182,11 +182,6 @@ class myRandomForestClassifier():
 
 		if self.oob_score:
 			self._set_oob_score(X, y)
-
-		# Decapsulate classes_ attributes
-		if hasattr(self, "classes_") and self.n_outputs_ == 1:
-			self.n_classes_ = self.n_classes_[0]
-			self.classes_ = self.classes_[0]
 		
 		self.samples = []
 		self.y = []
@@ -202,10 +197,10 @@ class myRandomForestClassifier():
 			raster_data=raster_data.cumsum(2).cumsum(1)
 
 		#Get classes
-		tmp = list(set(y))
-		self.classes = numpy.array(tmp)
-		self.n_classes = len(tmp)
-
+		classes, y[:] = numpy.unique(y[:], return_inverse=True)
+		self.classes_ = classes
+		self.n_classes_ = classes.shape[0]
+		
 		self.y = y
 
 		trees = []
@@ -242,10 +237,6 @@ class myRandomForestClassifier():
 		#if self.oob_score:
 		#	self._set_oob_score(X, y)
 
-		# Decapsulate classes_ attributes
-		if hasattr(self, "classes_") and self.n_outputs_ == 1:
-			self.n_classes_ = self.n_classes_[0]
-			self.classes_ = self.classes_[0]
 		
 		self.samples = []
 		self.y = []
@@ -278,7 +269,7 @@ class myRandomForestClassifier():
 		"""Predict class for X."""
 
 		proba = numpy.array(self.predict_proba(X))
-		return self.classes.take(numpy.argmax(proba, axis=1), axis=0)
+		return self.classes_.take(numpy.argmax(proba, axis=1), axis=0)
 
 	def predict_proba(self, X):
 		"""Predict class probabilities for X"""
@@ -311,7 +302,7 @@ class myRandomForestClassifier():
 	def predict_image(self, input_data, w_x, w_y):
 		"""Predict class for X."""
 		proba = numpy.array(self.predict_proba_image(input_data, w_x, w_y))
-		return self.classes.take(numpy.argmax(proba, axis=0))
+		return self.classes_.take(numpy.argmax(proba, axis=0))
 
 	def predict_proba_image(self, array_image, w_x, w_y):
 		"""Predict class probabilities for X"""
@@ -320,7 +311,7 @@ class myRandomForestClassifier():
 		array_image_cum = array_image.cumsum(2).cumsum(1)
 		x_gpu = gpuarray.to_gpu(array_image_cum.astype(numpy.float32))
 
-		proba_gpu = gpuarray.zeros((self.n_classes,s_x,s_y),numpy.float32)
+		proba_gpu = gpuarray.zeros((self.n_classes_,s_x,s_y),numpy.float32)
 		
 		for e in self.estimators_:
 			e.predict_proba_image(x_gpu,proba_gpu, w_x, w_y)
@@ -339,7 +330,7 @@ class myRandomForestClassifier():
 
 	def getFeatureImportanceByClass(self):
 
-		acc = self.featureFunction.getEmptyAccumulatorByClass(self.n_classes);
+		acc = self.featureFunction.getEmptyAccumulatorByClass(self.n_classes_);
 		for e in self.estimators_:
 			e.getFeatureImportanceByClass(acc)
 		

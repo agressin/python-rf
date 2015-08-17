@@ -51,6 +51,7 @@ def main(argv):
 
 	parser.add_argument('-t', '--train', help='do train', action='store_true', default=False)
 	parser.add_argument('-p', '--predict', help='do predict', action='store_true', default=False)
+	parser.add_argument('-pp', '--predict_proba', help='do predict proba', action='store_true', default=False)
 	
 	parser.add_argument('-ns', '--nb_samples', help='nb_samples (default is 500)', type=int, default=500)
 	parser.add_argument('-ws', '--windows_size', help='windows_size (default is 50)', type=int, default=50)
@@ -114,11 +115,16 @@ def main(argv):
 		
 	if args.output_jungle:
 		output_jungle = args.output_jungle
-		output_classif = output_jungle + ".tif"
+		output_classif = output_jungle
 	else:
 		output_jungle  = output + ".j"
-		output_classif = output + ".tif"
+		output_classif = output
 	
+	if args.predict_proba:
+		output_classif += "_p.tif"
+	else :
+		output_classif += ".tif"
+
 	print(output_jungle)
 	
 	########################################################################
@@ -162,11 +168,8 @@ def main(argv):
 		# Get random learning data
 		########################################################################
 
-		samplor = TrainSamplesGenerator(raster_image,raster_label)
-
 		print("Get random samples")
 		sample_index, y = samplor.getSamplesImages(n_samples,downscale)
-
 
 		########################################################################
 		# Train Jungle
@@ -191,7 +194,7 @@ def main(argv):
 
 		j.save(output_jungle)
 
-	if args.predict :
+	if args.predict or  args.predict_proba:
 		if(j is None):
 			print("Load Jungle")
 			j = myJungleClassifier.load(output_jungle)
@@ -199,15 +202,20 @@ def main(argv):
 		# Predict Jungle
 		########################################################################
 		print("Predict Jungle")
-		out = j.predict_image(array_image,SW,SW)
+		if args.predict :
+			out = j.predict_image(array_image,SW,SW)
+		
+		if args.predict_proba:
+			out = j.predict_proba_image(array_image,SW,SW)
 
 		########################################################################
 		# classification_report
 		########################################################################
-		report = my_classification_report(array_label,out,samplor.classes_labels)
-		print(report)
-		with open(output_jungle +".txt","a+") as fin:
-			fin.write(report)
+		if args.predict :
+			report = my_classification_report(array_label,out,samplor.classes_labels)
+			print(report)
+			with open(output_jungle +".txt","a+") as fin:
+				fin.write(report)
 
 		########################################################################
 		# Save ouput
@@ -215,11 +223,19 @@ def main(argv):
 		print("Save Predict")
 		driver = gdal.GetDriverByName('GTiff')
 
-		dst_ds = driver.Create( output_classif, out.shape[1], out.shape[0], 1, gdal.GDT_Byte )
-		dst_ds.SetGeoTransform( raster_image.GetGeoTransform() )
-		dst_ds.SetProjection( raster_image.GetProjection() )
-		dst_ds.GetRasterBand(1).WriteArray( out )
-	
+		if args.predict :
+			dst_ds = driver.Create( output_classif, out.shape[1], out.shape[0], 1, gdal.GDT_Byte )
+			dst_ds.SetGeoTransform( raster_image.GetGeoTransform() )
+			dst_ds.SetProjection( raster_image.GetProjection() )
+			dst_ds.GetRasterBand(1).WriteArray( out )
+		
+		if args.predict_proba:
+			dst_ds = driver.Create( output_classif, out.shape[2], out.shape[1], out.shape[0], gdal.GDT_Float32 )
+			dst_ds.SetGeoTransform( raster_image.GetGeoTransform() )
+			dst_ds.SetProjection( raster_image.GetProjection() )
+			for i in range(out.shape[0]):
+				dst_ds.GetRasterBand(i+1).WriteArray( out[i] )
+
 	if args.pid:
 		os.unlink(pidfile)
 
