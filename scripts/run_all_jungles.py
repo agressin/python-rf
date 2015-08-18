@@ -165,7 +165,8 @@ def get_info_from(job,local):
 	if not local:
 		cmd = "cd /home/prof/iPython;"
 		cmd += "echo '"
-		cmd += "python3 -u run_jungle.py"
+		#cmd += "python3 -u run_jungle.py"
+		cmd += "run_jungle.py"
 	else :
 		cmd = "run_jungle.py"
 
@@ -203,18 +204,25 @@ def get_info_from(job,local):
 		filename += "-md-" + job['max_depth']
 	else:
 		filename += "-md-5"
+
 	if 'nb_forests' in job:
 		cmd += " -nf " + job['nb_forests']
 		filename += "-nf-" + job['nb_forests']
+	elif 'nb_steps_simple' in job and 'nb_steps_proba' in job:
+		cmd += " -nss " + job['nb_steps_simple']
+		cmd += " -nsp " + job['nb_steps_proba']
+		filename += "-nss-" + job['nb_steps_simple']
+		filename += "-nsp-" + job['nb_steps_proba']
 	else:
 		filename += "-nf-2"
+
 	if 'specialisation' in job:
 		cmd += " -sp " + job['specialisation']
 		filename += "-sp-" + job['specialisation']
 	else:
 		filename += "-sp-none"
 	if 'add_previous_prob' in job:
-		if job['specialisation'] == "1" or job['specialisation'] == "True":
+		if job['add_previous_prob'] == "1" or job['add_previous_prob'] == "True":
 			cmd += " -app "
 			filename += "-app"
 	if 'use_geodesic' in job:
@@ -257,6 +265,7 @@ def main(argv):
 	parser = argparse.ArgumentParser(description="Run all over ssh.")
 
 	parser.add_argument('-r', '--run', help='Run', action='store_true', default=False)
+	parser.add_argument('-c', '--clean', help='Clean', action='store_true', default=False)
 	parser.add_argument('-g', '--get', help='Get', action='store_true', default=False)
 	parser.add_argument('-l', '--ls', help='ls', action='store_true', default=False)
 	parser.add_argument('-t', '--tail', help='Tail', type=int, default=0)
@@ -273,6 +282,7 @@ def main(argv):
 	run		= args.run
 	get		= args.get
 	ls		= args.ls
+	clean	= args.clean
 	tail	= args.tail
 	tail_grep	= args.tail_grep
 	filename_hosts = args.filename_hosts
@@ -310,6 +320,17 @@ def main(argv):
 				ssh_get_all(ssh,'/home/prof/iPython/out/jungle*.j','/home/agressin/tt/')
 				ssh.close()
 
+		if clean :
+			print("Are you sure to want remove all .j  in /home/prof/iPython/out ? (y/N)")
+			z = input ()
+			if z == "y" or z == "Y" or z == "yes" or z == "YES" :
+				for h in hosts_list:
+					ssh.connect(h, username="prof")
+					cmd = 'rm /home/prof/iPython/out/jungle*.j'
+					print(cmd)
+					ssh.exec_command(cmd)
+					ssh.close()
+
 		if run :
 
 			if not args.filename_jobs :
@@ -331,12 +352,12 @@ def main(argv):
 							j['host'] = h
 							j['run'] = True
 							ssh.connect(h, username="prof")
-							sftp = ssh.open_sftp()
-							sftp.put("run_jungle.py", "/home/prof/iPython/run_jungle.py")
+							#sftp = ssh.open_sftp()
+							#sftp.put("run_jungle.py", "/home/prof/iPython/run_jungle.py")
+							#sftp.close()
 							cmd = j['cmd']
 							print(h,cmd)
 							ssh.exec_command(cmd)
-							sftp.close()
 							ssh.close()
 							break
 

@@ -44,7 +44,7 @@ class TrainSamplesGenerator():
 			#Get number of pixel per classes (in the label image)
 			self.label_band = self.raster_label.GetRasterBand(1)
 			hist = np.array(self.label_band.GetHistogram(approx_ok = 0))
-			classes_labels = np.nonzero(hist)[0].tolist()
+			classes_labels = np.nonzero(hist>10)[0].tolist()
 			
 			#Remove no data classe
 			if no_data in classes_labels:

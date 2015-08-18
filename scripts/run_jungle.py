@@ -79,7 +79,10 @@ def main(argv):
 	parser.add_argument('-md', '--max_depth', help='max_depth (default is 5)', type=int, default=5)
 	parser.add_argument('-mss', '--min_samples_split', help='min_samples_split (default is 10)', type=int, default=10)
 	parser.add_argument('-msl', '--min_samples_leaf', help='min_samples_leaf (default is 5)', type=int, default=5)
+
 	parser.add_argument('-nf', '--nb_forests', help='nb_forests (default is 1)', type=int, default=1)
+	parser.add_argument('-nss', '--nb_steps_simple', help='steps_simple (default is 0)', type=int, default=0)
+	parser.add_argument('-nsp', '--nb_steps_proba', help='steps_proba (default is 0)', type=int, default=0)	
 	parser.add_argument('-sp', '--specialisation', help='specialisation [none, global, per_class] (default is none)', choices=['none', 'global', 'per_class'], default='none')
 	parser.add_argument('-app', '--add_previous_prob', help='add previous proba (default is False)', action='store_true', default=False)
 	parser.add_argument('-ug', '--use_geodesic', help='use geodesic proba (default is False)', action='store_true', default=False)
@@ -108,6 +111,8 @@ def main(argv):
 	min_samples_leaf 	= args.min_samples_leaf
 
 	n_forests 				= args.nb_forests
+	n_steps_simple		= args.nb_steps_simple
+	n_steps_proba			= args.nb_steps_proba
 	fusion 						= args.fusion # last_only, mean, weithed_mean ??, ... ?
 	specialisation 		= args.specialisation, # "none," "global" , "per_class", ... ?
 	add_previous_prob = args.add_previous_prob
@@ -122,12 +127,19 @@ def main(argv):
 	output += "-ne-" + str(n_estimators)
 	output += "-mf-" + str(max_features)
 	output += "-md-" + str(max_depth)
-	output += "-nf-" + str(n_forests)
+	
+	if n_steps_simple and n_steps_proba :
+		output += "-sts-" + str(n_steps_simple)
+		output += "-stp-" + str(n_steps_proba)
+	else:
+		output += "-nf-" + str(n_forests)
+		n_steps_simple = None
+		n_steps_proba  = None
 
 	if add_previous_prob :
 		output += "-app"
-	if use_geodesic:
-		output += "-ug"
+		if use_geodesic:
+			output += "-ug"
 		
 	output += "-fu-" + fusion
 
@@ -208,6 +220,8 @@ def main(argv):
 							n_jobs=n_jobs,
 							featureFunction = f,
 							n_forests = n_forests,
+							n_steps_simple = n_steps_simple,
+							n_steps_proba = n_steps_proba,
 							specialisation = specialisation,
 							add_previous_prob = add_previous_prob,
 				      use_geodesic = use_geodesic,
@@ -235,10 +249,13 @@ def main(argv):
 		# classification_report
 		########################################################################
 		if args.predict :
-			report = my_classification_report(array_label,out,samplor.classes_labels)
-			print(report)
-			with open(output_jungle +".txt","a+") as fin:
-				fin.write(report)
+			try:
+				report = my_classification_report(array_label,out,samplor.classes_labels)
+				print(report)
+				with open(output_jungle +".txt","a+") as fin:
+					fin.write(report)
+			except ValueError as e:
+				print("error with report :", e)
 
 		########################################################################
 		# Save ouput
