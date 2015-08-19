@@ -17,7 +17,7 @@ extensions = [
 
 setup(
     name='rf',
-    version='2.0',
+    version='2.2',
     cmdclass = {'build_ext':build_ext},
     ext_modules = extensions,
     py_modules=['rf','rf.Splitter', 'rf.Criterion', 'rf.FeatureFunction', 'rf.TrainSamples', 'rf.Forest', 'rf.DecisionTree', 'rf.tree', 'rf.Jungle'],

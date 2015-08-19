@@ -73,7 +73,7 @@ def _parallel_build_trees(tree, bootstrap, X, y, tree_idx, n_trees,
 	return tree
 
 def _parallel_build_trees_image(tree, bootstrap, raster_data, sample_index, y, tree_idx, n_trees,
-						  verbose=0, class_weight=None):
+						  verbose=0, class_weight=None, sections_depth = None):
 	"""Private function used to fit a single tree in parallel."""
 	if verbose > 1:
 		print("building tree %d of %d" % (tree_idx + 1, n_trees))
@@ -88,12 +88,12 @@ def _parallel_build_trees_image(tree, bootstrap, raster_data, sample_index, y, t
 
 		if class_weight == 'subsample':
 			curr_sample_weight *= compute_sample_weight('auto', y, indices)
-		tree.fit_image(raster_data, sample_index, y, curr_sample_weight)
+		tree.fit_image(raster_data, sample_index, y, curr_sample_weight, sections_depth)
 
 		tree.indices_ = sample_counts > 0.
 
 	else:
-		tree.fit_image(raster_data, sample_index, y)
+		tree.fit_image(raster_data, sample_index, y, sections_depth = sections_depth)
 
 	return tree
 
@@ -120,7 +120,7 @@ class myRandomForestClassifier():
 					n_jobs=4):
 
 		self.n_estimators=n_estimators
-		
+
 		self.estimator=myDecisionTreeClassifier(max_depth,
 				min_samples_split,
 				max_features,
@@ -144,8 +144,6 @@ class myRandomForestClassifier():
 		classes, y[:] = numpy.unique(y[:], return_inverse=True)
 		self.classes_ = classes
 		self.n_classes_ = classes.shape[0]
-
-		self.y = y
 
 		trees = []
 
@@ -182,17 +180,14 @@ class myRandomForestClassifier():
 
 		if self.oob_score:
 			self._set_oob_score(X, y)
-		
-		self.samples = []
-		self.y = []
 
 		return self
 
-	def fit_image(self, raster_data, sample_index, y, dview = None):
+	def fit_image(self, raster_data, sample_index, y, dview = None, sections_depth = None):
 		"""Build a forest of trees from the raster training set"""
 
 		n_samples = sample_index.shape[0]
-		
+
 		if (type(raster_data) is numpy.ndarray):
 			raster_data=raster_data.cumsum(2).cumsum(1)
 
@@ -200,8 +195,6 @@ class myRandomForestClassifier():
 		classes, y[:] = numpy.unique(y[:], return_inverse=True)
 		self.classes_ = classes
 		self.n_classes_ = classes.shape[0]
-		
-		self.y = y
 
 		trees = []
 
@@ -216,14 +209,14 @@ class myRandomForestClassifier():
 							 backend="threading")(
 				delayed(_parallel_build_trees_image)(
 					t, self.bootstrap, raster_data, sample_index, y, i, len(trees),
-					verbose = self.verbose)
+					verbose = self.verbose, sections_depth = sections_depth)
 				for i, t in enumerate(trees))
 		else:
 			tasks = []
 			for i, t in enumerate(trees):
 				ar = dview.apply_async(_parallel_build_trees_image,
 					t, self.bootstrap, raster_data, sample_index, y, i, len(trees),
-					verbose = self.verbose)
+					verbose = self.verbose, sections_depth = sections_depth)
 				tasks.append(ar)
 
 			# wait for computation to end
@@ -237,9 +230,6 @@ class myRandomForestClassifier():
 		#if self.oob_score:
 		#	self._set_oob_score(X, y)
 
-		
-		self.samples = []
-		self.y = []
 
 		return self
 
@@ -306,13 +296,13 @@ class myRandomForestClassifier():
 
 	def predict_proba_image(self, array_image, w_x, w_y):
 		"""Predict class probabilities for X"""
-		
+
 		s_c, s_x, s_y = array_image.shape
 		array_image_cum = array_image.cumsum(2).cumsum(1)
 		x_gpu = gpuarray.to_gpu(array_image_cum.astype(numpy.float32))
 
 		proba_gpu = gpuarray.zeros((self.n_classes_,s_x,s_y),numpy.float32)
-		
+
 		for e in self.estimators_:
 			e.predict_proba_image(x_gpu,proba_gpu, w_x, w_y)
 
@@ -325,7 +315,7 @@ class myRandomForestClassifier():
 		acc = self.featureFunction.getEmptyAccumulator();
 		for e in self.estimators_:
 			e.getFeatureImportance(acc)
-		
+
 		return acc
 
 	def getFeatureImportanceByClass(self):
@@ -333,8 +323,8 @@ class myRandomForestClassifier():
 		acc = self.featureFunction.getEmptyAccumulatorByClass(self.n_classes_);
 		for e in self.estimators_:
 			e.getFeatureImportanceByClass(acc)
-		
-		return acc		
+
+		return acc
 
 	def __repr__(self):
 		out = "RandomForest : \r\n"

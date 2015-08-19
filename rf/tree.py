@@ -130,7 +130,7 @@ class Node_GPU:
 # Class Tree for GPU
 # ======================================================================
 class Tree_GPU:
-	def __init__(self, tree, windows_x = 0, windows_y = 0):
+	def __init__(self, tree, windows_x = 0, windows_y = 0, entangled = False):
 
 		node_size = 60+tree.n_classes*4
 		self.ptr = cuda.mem_alloc(node_size*len(tree.nodes))
@@ -155,9 +155,13 @@ class Tree_GPU:
 			ym2 = 0
 			yM2 = 0
 			proba = [0]*tree.n_classes
-
-			if( node.isLeaf()):
-				isLeaf = True
+			
+			if(entangled):
+				isLeaf = (node.childs[0] == -1 and node.childs[1] == -1)
+			else:
+				isLeaf = node.isLeaf()
+				
+			if( isLeaf ):
 				proba = node.stats
 			else:
 				idChildLeft  = node.childs[0]
@@ -319,6 +323,101 @@ class Tree:
 		
 		self.depthFirstTreeBuilderCommon()
 
+	def entangledTreeBuilderImage(self, X, sample_index, y, sample_weight, sections_depth):
+		"""Build a decision tree from the training set (X, y) with entangled strategie """
+
+		# Recursive partition (without actual recursion)
+		self.splitter.init_image(X, sample_index, y, sample_weight)
+		#TODO
+		# Parameters
+		splitter = self.splitter
+		max_depth = self.max_depth
+		min_samples_leaf = self.min_samples_leaf
+		min_samples_split = self.min_samples_split
+
+		n_node_samples = splitter.n_samples
+
+		impurity = numpy.inf
+		first = 1
+		max_depth_seen = -1
+
+		stack = []
+		stack_next_level = []
+		stackRecord=StackRecord(0, n_node_samples, 0, -1, 0, numpy.inf,[])
+		# push root node onto stack
+		stack_next_level.append(stackRecord)
+		
+		for index,depth_level in enumerate(sections_depth):
+			stack = stack_next_level
+			while stack: # stack is not empty
+				stack_record = stack.pop()
+
+				start = stack_record.start
+				end = stack_record.end
+				depth = stack_record.depth
+				parent = stack_record.parent
+				is_left = stack_record.is_left
+				impurity = stack_record.impurity
+
+				n_node_samples = end - start
+
+				splitter.node_reset(start, end)
+
+				is_leaf = ((depth >= max_depth) or
+							 (n_node_samples < min_samples_split) or
+							 (n_node_samples < 2 * min_samples_leaf))
+
+				if first:
+					impurity = splitter.node_impurity()
+					first = 0
+
+				is_leaf = is_leaf or (impurity <= 1e-7)
+
+				split = SplitRecord()
+
+				if not is_leaf:
+					split = splitter.node_split(impurity)
+					is_leaf = is_leaf or (split.pos >= end)
+
+				node_id = self._add_node(parent, is_left, is_leaf, split.feature,
+										 split.threshold, impurity, n_node_samples,
+										 stack_record.stats, split.improvement)
+
+				if not is_leaf:
+					rc = StackRecord(split.pos, end, depth + 1, node_id, 0,
+										split.impurity_right, split.stats_right)
+					lc = StackRecord(start, split.pos, depth + 1, node_id, 1,
+										split.impurity_left, split.stats_left)
+					if depth < depth_level:
+						stack.append(rc)
+						stack.append(lc)
+					else :
+						stack_next_level.append(rc)
+						stack_next_level.append(lc)
+
+				if depth > max_depth_seen:
+					max_depth_seen = depth
+			#while stack
+			#TODO compute proba
+			s_c, s_x, s_y = X.shape
+			x_gpu = gpuarray.to_gpu(X.astype(numpy.float32))
+			proba_gpu = gpuarray.zeros((self.n_classes_,s_x,s_y),numpy.float32)
+			self.predict_proba_image(x_gpu,proba_gpu, w_x, w_y, entangled = True)
+			proba = proba_gpu.get().cumsum(2).cumsum(1)
+			if index == 0:
+				X = numpy.concatenate((X,proba))
+			else :
+				p = proba.shape[0]
+				X = numpy.concatenate((X[:-p,:,:],proba))
+			
+			splitter.X = X
+			featureFunction.nb_channels = X.shape[0]
+			# add it to X
+			#splitter.X = ...
+			#splitter.featureFunction
+			# continue
+		self.max_depth = max_depth_seen
+
 	def bestFirstTreeBuilder(self, X, y):
 		""" bestFirstTreeBuilder """
 		#TODO
@@ -353,7 +452,7 @@ class Tree:
 			out[i,:] = node.stats
 		return out
 
-	def predict_image(self, x_gpu, proba_gpu, w_x, w_y):
+	def predict_image(self, x_gpu, proba_gpu, w_x, w_y, entangled = False):
 		func_mod_template = Template("""
 
 			// Macro for converting subscripts to linear index:
@@ -471,7 +570,7 @@ class Tree:
 		add_proba = func_mod.get_function('add_proba')
 
 		#Copy data to GPU
-		tree_gpu = Tree_GPU(self)
+		tree_gpu = Tree_GPU(self,entangled)
 		id = numpy.zeros(sizeX*sizeY).reshape(sizeX,sizeY).astype(numpy.uint32)
 
 		id_gpu = gpuarray.to_gpu(id)

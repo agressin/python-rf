@@ -45,7 +45,7 @@ class myJungleClassifier():
 		self.n_steps_simple = n_steps_simple
 		self.n_steps_proba = n_steps_proba
 		self.geodesic_cost = None
-		
+
 		self.forest=myRandomForestClassifier(n_estimators,
 				max_depth,
 				min_samples_split,
@@ -76,7 +76,7 @@ class myJungleClassifier():
 			proba[i] = GDT(a*(1-proba[i]), b*self.geodesic_cost)
 			proba[i] = 1 - proba[i]/a
 		return proba
-	
+
 	def fit(self, X, y, dview = None):
 		"""Build a jungle of trees from the training set (X, y)"""
 		#Get classes
@@ -84,10 +84,10 @@ class myJungleClassifier():
 		self.classes_ = classes
 		self.n_classes_ = classes.shape[0]
 		forests = []
-		
+
 		featureFunction = self.featureFunction
 		for i in range(self.n_forests):
-			print("forest : ",i," / ",self.n_forests)
+			print("forest : ",i+1," / ",self.n_forests)
 			if (i != 0):
 				if(self.specialisation == 'global'):
 					acc = forest.getFeatureImportance()
@@ -103,7 +103,7 @@ class myJungleClassifier():
 
 		# Collect newly grown Forests
 		self.forests_.extend(forests)
-		
+
 	def fit_image(self, array_data, sample_index, y, dview = None):
 		"""Build a jungle of trees from the training set (X, y)"""
 
@@ -115,14 +115,14 @@ class myJungleClassifier():
 		forests = []
 		featureFunction = self.featureFunction
 		SWx,SWy = featureFunction.width, featureFunction.height
-		
+
 		if(self.use_geodesic):
 			pan = array_data[0]
 			self.geodesic_cost = nd.gaussian_gradient_magnitude(pan, self.geodesic_sigma)
-		
+
 		if(self.n_steps_simple is None and self.n_steps_proba is None):
 			for i in range(self.n_forests):
-				print("forest : ",i," / ",self.n_forests)
+				print("forest : ",i+1," / ",self.n_forests)
 				if (i != 0):
 					if(self.specialisation == 'global'):
 						acc = forest.getFeatureImportance()
@@ -134,8 +134,8 @@ class myJungleClassifier():
 						proba = forest.predict_proba_image(array_data,SWx,SWy)
 						if(self.use_geodesic):
 							proba = self.geodesic(proba)
-						featureFunction.nb_channels += proba.shape[0]
 						array_data = numpy.concatenate((array_data,proba))
+						featureFunction.nb_channels = array_data.shape[0]
 
 				forest = deepcopy(self.forest)
 				forest.featureFunction = featureFunction
@@ -145,6 +145,8 @@ class myJungleClassifier():
 			n_forests = 0
 			for step_proba in range(self.n_steps_proba):
 				for step_simple in range(self.n_steps_simple):
+					print("step_proba : " ,step_proba +1," / ",self.n_steps_proba)
+					print("step_simple : ",step_simple+1," / ",self.n_steps_simple)
 					if (step_simple != 0):
 						if(self.specialisation == 'global'):
 							acc = forest.getFeatureImportance()
@@ -162,8 +164,8 @@ class myJungleClassifier():
 						if(self.use_geodesic):
 							proba = self.geodesic(proba)
 						#if use_geodesic
-						featureFunction.nb_channels += proba.shape[0]
 						array_data = numpy.concatenate((array_data,proba))
+						featureFunction.nb_channels = array_data.shape[0]
 					#if (step_proba != 0) and (step_simple=0):
 					forest = deepcopy(self.forest)
 					forest.featureFunction = featureFunction
@@ -172,8 +174,8 @@ class myJungleClassifier():
 					n_forests +=1
 				#for step_simple
 			#for step_proba
-			self.n_forests = n_forests	
-		
+			self.n_forests = n_forests
+
 		# Collect newly grown Forests
 		self.forests_.extend(forests)
 
@@ -181,7 +183,7 @@ class myJungleClassifier():
 		"""Predict class for X."""
 		proba = numpy.array(self.predict_proba(X))
 		return self.classes_.take(numpy.argmax(proba, axis=0))
-	
+
 	def predict_proba(self, X):
 		"""Predict class probabilities for X"""
 		all_proba = []
@@ -198,7 +200,7 @@ class myJungleClassifier():
 		else: # (fusion =="last"):
 			return proba
 
-		
+
 	def predict_image(self, array_data, w_x, w_y):
 		"""Predict class for X."""
 		proba = numpy.array(self.predict_proba_image(array_data, w_x, w_y))
@@ -237,7 +239,7 @@ class myJungleClassifier():
 					i +=1
 				#for step_simple
 			#for step_proba
-			
+
 		if(self.fusion == "mean"):
 			for j in range(1, len(all_proba)):
 				proba += all_proba[j]

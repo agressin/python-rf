@@ -9,3 +9,6 @@ Dépendances :
 
 Installation
  python3 setup.py install
+
+Package
+ python3 setup.py sdist

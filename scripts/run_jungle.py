@@ -21,7 +21,7 @@ try:
    from sklearn.metrics import classification_report
 except ImportError:
     pass
-   
+
 
 #TODO ??
 #######################################################################
@@ -53,7 +53,7 @@ def my_classification_report(array_true, array_pred, labels = None, no_data = 0)
 		y_pred = y_pred[y_true != no_data]
 		y_true = y_true[y_true != no_data]
 
-		return classification_report(y_true, y_pred, labels)				
+		return classification_report(y_true, y_pred, labels)
 
 ########################################################################
 # Parameters
@@ -63,15 +63,17 @@ def main(argv):
 
 	parser = argparse.ArgumentParser(description="Run Jungle Random Forest.")
 
-	parser.add_argument('-i', '--image', help='input image', type=str, default="data/all_crop_2.tif")
-	parser.add_argument('-l', '--label', help='input label', type=str, default="learning/OCS_TEST.tif")
-	parser.add_argument('-o', '--output', help='output dir', type=str, default="out/jungle")
+	parser.add_argument('-i', '--images', help='input images list', type=str, nargs='+', default="")
+	parser.add_argument('-l', '--labels', help='input labels list', type=str, nargs='+', default="")
+	parser.add_argument('-nd', '--no_data', help='no data value for label (default is 0)', type=int, default=0)
+	parser.add_argument('-ds', '--downscale', help='downscaling factor for label search (default is 1)', type=int, default=1)
+	parser.add_argument('-o', '--output', help='output dir', type=str, default="")
 	parser.add_argument('-oj', '--output_jungle', help='output jungle', type=str, default="")
 
 	parser.add_argument('-t', '--train', help='do train', action='store_true', default=False)
 	parser.add_argument('-p', '--predict', help='do predict', action='store_true', default=False)
 	parser.add_argument('-pp', '--predict_proba', help='do predict proba', action='store_true', default=False)
-	
+
 	parser.add_argument('-ns', '--nb_samples', help='nb_samples (default is 500)', type=int, default=500)
 	parser.add_argument('-ws', '--windows_size', help='windows_size (default is 50)', type=int, default=50)
 	parser.add_argument('-ne', '--nb_estimators', help='nb_estimators (default is 50)', type=int, default=50)
@@ -82,27 +84,39 @@ def main(argv):
 
 	parser.add_argument('-nf', '--nb_forests', help='nb_forests (default is 1)', type=int, default=1)
 	parser.add_argument('-nss', '--nb_steps_simple', help='steps_simple (default is 0)', type=int, default=0)
-	parser.add_argument('-nsp', '--nb_steps_proba', help='steps_proba (default is 0)', type=int, default=0)	
+	parser.add_argument('-nsp', '--nb_steps_proba', help='steps_proba (default is 0)', type=int, default=0)
 	parser.add_argument('-sp', '--specialisation', help='specialisation [none, global, per_class] (default is none)', choices=['none', 'global', 'per_class'], default='none')
 	parser.add_argument('-app', '--add_previous_prob', help='add previous proba (default is False)', action='store_true', default=False)
 	parser.add_argument('-ug', '--use_geodesic', help='use geodesic proba (default is False)', action='store_true', default=False)
 	parser.add_argument('-fu', '--fusion', help='fusion [last, mean] (default is last)', choices=['last', 'mean'], default='last')
-	
+
 	parser.add_argument('-pid', '--pid', help='to save pid in a file', action='store_true', default=False)
-	
+
 	args = parser.parse_args()
 
 	if len(sys.argv) <= 1 :
 		parser.print_help()
 		exit()
 
-	input_image 			= args.image
-	input_label 			= args.label
+	input_images 			= args.images
+	input_labels 			= args.labels
+
+	get_labels = True
+	if (len(input_images) != len(input_labels)):
+		if args.train :
+			print("Error for train: len(input_images) != len(input_labels)")
+			exit()
+		else :
+			get_labels = False
+		
+	n_images = len(input_images)
+
 	output 						= args.output
+	no_data 					= args.no_data
 
 	n_samples 				= args.nb_samples
 	SW 								= args.windows_size
-	downscale=1
+	downscale					= args.downscale
 
 	n_estimators 			= args.nb_estimators
 	max_features 			= args.max_features
@@ -127,7 +141,7 @@ def main(argv):
 	output += "-ne-" + str(n_estimators)
 	output += "-mf-" + str(max_features)
 	output += "-md-" + str(max_depth)
-	
+
 	if n_steps_simple and n_steps_proba :
 		output += "-sts-" + str(n_steps_simple)
 		output += "-stp-" + str(n_steps_proba)
@@ -140,28 +154,24 @@ def main(argv):
 		output += "-app"
 		if use_geodesic:
 			output += "-ug"
-		
+
 	output += "-fu-" + fusion
 
-
-	#output+="-"+str(n_samples)+"-"+str(n_estimators)+"-"+str(max_features)+"-"+str(max_depth)+"-"+str(SW)+"-"+str(n_forests)
 	if(use_geodesic):
-		output += "geoF"	
-		
+		output += "geoF"
+
 	if args.output_jungle:
 		output_jungle = args.output_jungle
 		output_classif = output_jungle
 	else:
 		output_jungle  = output + ".j"
 		output_classif = output
-	
+
 	if args.predict_proba:
-		output_classif += "_p.tif"
-	else :
-		output_classif += ".tif"
+		output_classif += "_p"
 
 	print(output_jungle)
-	
+
 	########################################################################
 	# To save pid in a tmp file
 	########################################################################
@@ -178,38 +188,57 @@ def main(argv):
 	########################################################################
 	# Read data and labels
 	########################################################################
-	print("Read Images")
-	print(input_image)
-	raster_image = gdal.Open(input_image)
-	print(input_label)
-	raster_label = gdal.Open(input_label)
+	#TODO à virer
+	#if(n_images == 1) :
+	#	input_image = input_images[0]
+	#	input_label = input_labels[0]
+	#	print("Read Images")
+	#	print(input_image)
+	#	raster_image = gdal.Open(input_image)
+	#	print(input_label)
+	#	raster_label = gdal.Open(input_label)
+	#	nbChannels = raster_image.RasterCount
+	#TODO FIN
 
-	nbChannels = raster_image.RasterCount
+	raster_images = []
+	nbChannels = 0
+	for image in input_images:
+		raster = gdal.Open(image)
+		raster_images.append(raster)
+		nbChannels_tmp = raster.RasterCount
+		if nbChannels == 0:
+			nbChannels = nbChannels_tmp
+		else :
+			if nbChannels != nbChannels_tmp:
+				print('Inputs images have different numbers of band')
+				exit()
 
-	array_image = np.array(raster_image.ReadAsArray())
-	array_label = np.array(raster_label.ReadAsArray())
+	if get_labels :
+		raster_labels = []
+		for label in input_labels:
+			raster = gdal.Open(label)
+			raster_labels.append(raster)
 
-	nbChannels, sizeX, sizeY = array_image.shape
 
 	########################################################################
-	# Compute some stats
+	# Get samplors
 	########################################################################
+	if get_labels :
+		samplors = []
+		for i in range(n_images):
+			sa = TrainSamplesGenerator(raster_images[i],raster_labels[i],no_data=no_data)
+			samplors.append(sa)
 
-	samplor = TrainSamplesGenerator(raster_image,raster_label)
-
+	########################################################################
+	# Trainning
+	########################################################################
 	j = None
 	if args.train :
-		########################################################################
-		# Get random learning data
-		########################################################################
-
-		print("Get random samples")
-		sample_index, y = samplor.getSamplesImages(n_samples,downscale)
 
 		########################################################################
-		# Train Jungle
+		# Create Jungle
 		########################################################################
-		print("Train Jungle")
+
 		f = FeatureFunction(nbChannels,SW,SW)
 		j = myJungleClassifier(n_estimators = n_estimators,
 							max_features = max_features,
@@ -227,54 +256,92 @@ def main(argv):
 				      use_geodesic = use_geodesic,
 							fusion = fusion # last_only, mean, weithed_mean ??, ... ?
 							)
-		j.fit_image(array_image,sample_index, y)
 
+		########################################################################
+		# Train Jungle
+		########################################################################
+		#TODO tester aussi si l'image est pas trop grosse (sinon on utiliser la 2e méthode)
+		if(n_images == 1) :
+			print("Get samples from one image")
+			samplor = samplors[0]
+			sample_index, y = samplor.getSamplesImages(n_samples,downscale)
+			array_image = np.array(raster_images[0].ReadAsArray())
+			print("Train Jungle")
+			j.fit_image(array_image,sample_index, y)
+
+		else:
+			X = None
+			#TODO repartir le nb de samples par images avec la repartition des classes ?
+			n_samples_per_image = n_samples // n_images
+			print("Get samples from ",n_images," images")
+			for samplor in samplors:
+				X_tmp, y_tmp = samplor.getSamples(n_samples_per_image, SW,SW, downscale = downscale)
+				if X is None:
+					X = X_tmp
+					y = y_tmp
+				else:
+					X = np.append(X,X_tmp, axis=0)
+					y = np.append(y,y_tmp, axis=0)
+			print("X.shape", X.shape)
+			print("y.shape", y.shape)
+			print("Train Jungle")
+			j.fit(X,y)
+		########################################################################
+		# Save Jungle
+		########################################################################
 		j.save(output_jungle)
 
 	if args.predict or  args.predict_proba:
 		if(j is None):
 			print("Load Jungle")
 			j = myJungleClassifier.load(output_jungle)
-		########################################################################
-		# Predict Jungle
-		########################################################################
-		print("Predict Jungle")
-		if args.predict :
-			out = j.predict_image(array_image,SW,SW)
-		
-		if args.predict_proba:
-			out = j.predict_proba_image(array_image,SW,SW)
 
-		########################################################################
-		# classification_report
-		########################################################################
-		if args.predict :
-			try:
-				report = my_classification_report(array_label,out,samplor.classes_labels)
-				print(report)
-				with open(output_jungle +".txt","a+") as fin:
-					fin.write(report)
-			except ValueError as e:
-				print("error with report :", e)
+		for i in range(n_images) :
+			postfix = ""
+			if n_images >=1:
+				postfix = "_"+os.path.splitext(os.path.basename(input_images[i]))[0]
+			########################################################################
+			# Predict Jungle
+			########################################################################
+			print("Predict Jungle image ", i+1, "/", n_images)
+			array_image = np.array(raster_images[i].ReadAsArray())
+			if args.predict :
+				out = j.predict_image(array_image,SW,SW)
 
-		########################################################################
-		# Save ouput
-		########################################################################
-		print("Save Predict")
-		driver = gdal.GetDriverByName('GTiff')
+			if args.predict_proba:
+				out = j.predict_proba_image(array_image,SW,SW)
 
-		if args.predict :
-			dst_ds = driver.Create( output_classif, out.shape[1], out.shape[0], 1, gdal.GDT_Byte )
-			dst_ds.SetGeoTransform( raster_image.GetGeoTransform() )
-			dst_ds.SetProjection( raster_image.GetProjection() )
-			dst_ds.GetRasterBand(1).WriteArray( out )
-		
-		if args.predict_proba:
-			dst_ds = driver.Create( output_classif, out.shape[2], out.shape[1], out.shape[0], gdal.GDT_Float32 )
-			dst_ds.SetGeoTransform( raster_image.GetGeoTransform() )
-			dst_ds.SetProjection( raster_image.GetProjection() )
-			for i in range(out.shape[0]):
-				dst_ds.GetRasterBand(i+1).WriteArray( out[i] )
+			########################################################################
+			# classification_report
+			########################################################################
+			if args.predict and get_labels :
+				try:
+					array_label = np.array(raster_labels[i].ReadAsArray())
+					report = my_classification_report(array_label,out,samplor.classes_labels,no_data)
+					print(report)
+					with open(output_jungle+postfix+".txt","a+") as fin:
+						fin.write(report)
+				except ValueError as e:
+					print("error with report :", e)
+
+			########################################################################
+			# Save ouput
+			########################################################################
+			print("Save Predict")
+			driver = gdal.GetDriverByName('GTiff')
+
+			if args.predict :
+				dst_ds = driver.Create( output_classif+postfix+".tif", out.shape[1], out.shape[0], 1, gdal.GDT_Byte )
+				dst_ds.SetGeoTransform( raster_images[i].GetGeoTransform() )
+				dst_ds.SetProjection( raster_images[i].GetProjection() )
+				dst_ds.GetRasterBand(1).WriteArray( out )
+
+			if args.predict_proba:
+				dst_ds = driver.Create( output_classif+postfix+".tif", out.shape[2], out.shape[1], out.shape[0], gdal.GDT_Float32 )
+				dst_ds.SetGeoTransform( raster_images[i].GetGeoTransform() )
+				dst_ds.SetProjection( raster_images[i].GetProjection() )
+				for i in range(out.shape[0]):
+					dst_ds.GetRasterBand(i+1).WriteArray( out[i] )
 
 	if args.pid:
 		os.unlink(pidfile)

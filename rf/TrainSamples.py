@@ -126,7 +126,7 @@ class TrainSamplesGenerator():
 				X = np.zeros((nb_samples,self.c_d))
 			else:
 				X = np.zeros((nb_samples,self.c_d,windows_w, windows_h))
-			print("X.shape ",X.shape)
+
 			w = windows_w //2
 			h = windows_h //2
 			for i_b in range(0, xsize, x_block_size):  
