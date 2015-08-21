@@ -17,7 +17,8 @@ class myDecisionTreeClassifier:
 				min_samples_leaf = 1,
 				max_leaf_nodes = -1,
 				criterion = Gini(),
-				featureFunction = FeatureFunction()):
+				featureFunction = FeatureFunction(),
+				entangled = None):
 		""" init """
 
 		self.max_depth = max_depth
@@ -27,6 +28,7 @@ class myDecisionTreeClassifier:
 		self.max_leaf_nodes = max_leaf_nodes
 		self.featureFunction = featureFunction
 		self.criterion = criterion
+		self.entangled = entangled
 
 	def fit(self, X, y, sample_weight=None):
 		"""Build a decision tree from the training set (X, y)."""
@@ -58,7 +60,7 @@ class myDecisionTreeClassifier:
 		self.tree.release()
 		return self
 
-	def fit_image(self, raster_data, sample_index, y, sample_weight=None, sections_depth = None):
+	def fit_image(self, raster_data, sample_index, y, sample_weight=None):
 		"""Build a decision tree from one image."""
 
 		#Get classes
@@ -80,8 +82,8 @@ class myDecisionTreeClassifier:
 										   self.max_leaf_nodes)
 		
 		if (type(raster_data) is np.ndarray):
-			if sections_depth is not None :
-				self.tree.entangledTreeBuilderImage(raster_data, sample_index,y,sample_weight,sections_depth)
+			if self.entangled is not None :
+				self.tree.entangledTreeBuilderImage(raster_data, sample_index,y,sample_weight,self.entangled)
 			elif self.max_leaf_nodes < 0:
 				self.tree.depthFirstTreeBuilderImage(raster_data, sample_index,y,sample_weight)
 			else:
@@ -114,7 +116,7 @@ class myDecisionTreeClassifier:
 		return self.classes.take(np.argmax(proba, axis=2))
 
 	def predict_proba_image(self,x_gpu,proba_gpu, w_x, w_y):
-		self.tree.predict_image(x_gpu,proba_gpu, w_x, w_y)
+		self.tree.predict_image(x_gpu,proba_gpu, w_x, w_y, entangled = self.entangled)
 
 	def getFeatureImportance(self, acc = None):
 		return self.tree.getFeatureImportance(acc)

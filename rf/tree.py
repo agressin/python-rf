@@ -1,5 +1,6 @@
 from string import Template
 from copy import deepcopy
+
 try:
 	import pycuda.autoinit
 	import pycuda.gpuarray as gpuarray
@@ -20,13 +21,14 @@ from .Splitter import SplitRecord
 class Node:
 	"""Class Node"""
 
-	def __init__(self, parent, is_left, impurity,n_node_samples,stats):
+	def __init__(self, parent, is_left, impurity,n_node_samples,stats,depth):
 		""" init """
 		self.parent = parent
 		self.is_left = is_left
 		self.impurity = impurity
 		self.n_node_samples = n_node_samples
 		self.stats = deepcopy(stats)
+		self.depth = depth
 	
 	def isLeaf(self):
 		"""isLeaf function"""
@@ -39,13 +41,14 @@ class Split(Node):
 	"""Class Split"""
 	 
 	def __init__(self,parent, is_left, feature, threshold, impurity,
-					n_node_samples, improvement, stats):
+					n_node_samples, improvement, stats, depth):
 		""" init """
-		Node.__init__(self, parent, is_left, impurity, n_node_samples, stats)
+		Node.__init__(self, parent, is_left, impurity, n_node_samples, stats, depth)
 		self.feature = feature
 		self.threshold = threshold
 		self.childs=[-1,-1]
 		self.improvement = improvement
+		
 
 
 	def __repr__(self):
@@ -64,9 +67,9 @@ class Split(Node):
 class Leaf(Node):
 	"""Class Leaf"""
 	 
-	def __init__(self,parent, is_left, impurity, n_node_samples, stats):
+	def __init__(self,parent, is_left, impurity, n_node_samples, stats, depth):
 		""" init """
-		Node.__init__(self, parent, is_left, impurity,n_node_samples, stats)
+		Node.__init__(self, parent, is_left, impurity,n_node_samples, stats, depth)
 		#self.stats = deepcopy(stats)
 
 	def isLeaf(self):
@@ -100,7 +103,7 @@ class StackRecord:
 # ======================================================================
 class Node_GPU:
 	def __init__(self, ptr, isLeaf, threshold, proba,n_classes,
-					idChildLeft, idChildRight, type,
+					idChildLeft, idChildRight, type,depth,
 					c1,xm1,xM1,ym1,yM1,c2,xm2,xM2,ym2,yM2 ):
 
 		shift = 0
@@ -109,6 +112,7 @@ class Node_GPU:
 		b = memoryview(numpy.float32(threshold)); 	cuda.memcpy_htod(int(ptr)+shift, b); shift+= 4
 		b = memoryview(numpy.uint32(idChildLeft)); 	cuda.memcpy_htod(int(ptr)+shift, b); shift+= 4
 		b = memoryview(numpy.uint32(idChildRight)); cuda.memcpy_htod(int(ptr)+shift, b); shift+= 4
+		b = memoryview(numpy.uint32(depth)); 		cuda.memcpy_htod(int(ptr)+shift, b); shift+= 4
 		b = memoryview(numpy.uint32(type)); 		cuda.memcpy_htod(int(ptr)+shift, b); shift+= 4
 		b = memoryview(numpy.int32(c1)); 			cuda.memcpy_htod(int(ptr)+shift, b); shift+= 4
 		b = memoryview(numpy.int32(xm1)); 			cuda.memcpy_htod(int(ptr)+shift, b); shift+= 4
@@ -130,9 +134,9 @@ class Node_GPU:
 # Class Tree for GPU
 # ======================================================================
 class Tree_GPU:
-	def __init__(self, tree, windows_x = 0, windows_y = 0, entangled = False):
+	def __init__(self, tree, windows_x = 0, windows_y = 0, intermediate = False):
 
-		node_size = 60+tree.n_classes*4
+		node_size = 64+tree.n_classes*4
 		self.ptr = cuda.mem_alloc(node_size*len(tree.nodes))
 		shift=0
 		dX = windows_x
@@ -156,7 +160,8 @@ class Tree_GPU:
 			yM2 = 0
 			proba = [0]*tree.n_classes
 			
-			if(entangled):
+			isLeaf = node.isLeaf() 
+			if(intermediate and not isLeaf):
 				isLeaf = (node.childs[0] == -1 and node.childs[1] == -1)
 			else:
 				isLeaf = node.isLeaf()
@@ -167,6 +172,7 @@ class Tree_GPU:
 				idChildLeft  = node.childs[0]
 				idChildRight = node.childs[1]
 				threshold = node.threshold
+				depth = node.depth
 				param = node.feature.option['RQE']
 				w = param['windows'][0]
 				c1 = w['Channel']
@@ -188,7 +194,7 @@ class Tree_GPU:
 					elif  param['type'] == 'ratio':
 						type = 3
 			n = Node_GPU(int(self.ptr)+shift,isLeaf,threshold,proba,tree.n_classes,
-					idChildLeft, idChildRight, type,
+					idChildLeft, idChildRight, type,depth,
 					c1,xm1,xM1,ym1,yM1,c2,xm2,xM2,ym2,yM2)
 
 			assert(node_size == n.shift)
@@ -219,14 +225,14 @@ class Tree:
 
 	def _add_node(self, parent, is_left, is_leaf, feature,
 							threshold, impurity, n_node_samples,
-							stats, improvement):
+							stats, improvement, depth):
 		""" _add_node """
 		if(is_leaf):
-			l = Leaf(parent, is_left, impurity, n_node_samples, stats)
+			l = Leaf(parent, is_left, impurity, n_node_samples, stats, depth)
 			self.nodes.append(l)
 		else:
 			s = Split(parent, is_left, feature, threshold, impurity,
-						n_node_samples, improvement, stats)
+						n_node_samples, improvement, stats, depth)
 			self.nodes.append(s)
 
 		node_id=len(self.nodes)-1
@@ -292,7 +298,7 @@ class Tree:
 
 			node_id = self._add_node(parent, is_left, is_leaf, split.feature,
 									 split.threshold, impurity, n_node_samples,
-									 stack_record.stats, split.improvement)
+									 stack_record.stats, split.improvement, depth)
 
 			if not is_leaf:
 				# Push right child on stack
@@ -323,9 +329,9 @@ class Tree:
 		
 		self.depthFirstTreeBuilderCommon()
 
-	def entangledTreeBuilderImage(self, X, sample_index, y, sample_weight, sections_depth):
+	def entangledTreeBuilderImage(self, X, sample_index, y, sample_weight, entangled):
 		"""Build a decision tree from the training set (X, y) with entangled strategie """
-
+		X = X.astype(numpy.float32)
 		# Recursive partition (without actual recursion)
 		self.splitter.init_image(X, sample_index, y, sample_weight)
 		#TODO
@@ -347,8 +353,11 @@ class Tree:
 		# push root node onto stack
 		stack_next_level.append(stackRecord)
 		
-		for index,depth_level in enumerate(sections_depth):
-			stack = stack_next_level
+		for index,depth_level in enumerate(entangled):
+		
+			stack = deepcopy(stack_next_level)
+			stack_next_level = []
+			
 			while stack: # stack is not empty
 				stack_record = stack.pop()
 
@@ -381,7 +390,7 @@ class Tree:
 
 				node_id = self._add_node(parent, is_left, is_leaf, split.feature,
 										 split.threshold, impurity, n_node_samples,
-										 stack_record.stats, split.improvement)
+										 stack_record.stats, split.improvement, depth)
 
 				if not is_leaf:
 					rc = StackRecord(split.pos, end, depth + 1, node_id, 0,
@@ -397,27 +406,39 @@ class Tree:
 
 				if depth > max_depth_seen:
 					max_depth_seen = depth
-			#while stack
-			#TODO compute proba
-			s_c, s_x, s_y = X.shape
-			x_gpu = gpuarray.to_gpu(X.astype(numpy.float32))
-			proba_gpu = gpuarray.zeros((self.n_classes_,s_x,s_y),numpy.float32)
-			self.predict_proba_image(x_gpu,proba_gpu, w_x, w_y, entangled = True)
-			proba = proba_gpu.get().cumsum(2).cumsum(1)
-			if index == 0:
-				X = numpy.concatenate((X,proba))
-			else :
-				p = proba.shape[0]
-				X = numpy.concatenate((X[:-p,:,:],proba))
 			
-			splitter.X = X
-			featureFunction.nb_channels = X.shape[0]
-			# add it to X
-			#splitter.X = ...
-			#splitter.featureFunction
-			# continue
-		self.max_depth = max_depth_seen
+			if(len(stack_next_level)):
+				print("####################### depth_level ", depth_level)
+				#while stack
+				#TODO compute proba
+				print("compute proba 1")
 
+				s_c, s_x, s_y = X.shape
+
+				x_gpu = gpuarray.to_gpu(X)
+				proba_gpu = gpuarray.zeros((self.n_classes,s_x,s_y),numpy.float32)
+				w_x,w_y = self.featureFunction.width, self.featureFunction.height
+				self.predict_image(x_gpu,proba_gpu, w_x, w_y, intermediate = True)
+
+				print("compute proba 2")
+				proba = proba_gpu.get()
+				print(proba.shape)
+
+				proba = proba.cumsum(2).cumsum(1)
+				if index == 0:
+					X = numpy.concatenate((X,proba))
+				else :
+					p = proba.shape[0]
+					X = numpy.concatenate((X[:-p,:,:],proba))
+
+			
+				splitter.X = X
+				self.featureFunction.nb_channels = X.shape[0]
+				print(X.shape[0])
+
+		self.max_depth = max_depth_seen
+		print("####################### max_depth ", max_depth_seen)
+		
 	def bestFirstTreeBuilder(self, X, y):
 		""" bestFirstTreeBuilder """
 		#TODO
@@ -436,7 +457,7 @@ class Tree:
 		n_bands = X.shape[1]
 
 		# Initialize output
-		out = numpy.zeros(n_samples*self.n_classes).reshape(n_samples,self.n_classes)
+		out = numpy.zeros((n_samples,self.n_classes))
 		Xtmp = numpy.ones((1,n_bands))
 		for i in range(n_samples):
 			node = self.nodes[0]
@@ -452,7 +473,7 @@ class Tree:
 			out[i,:] = node.stats
 		return out
 
-	def predict_image(self, x_gpu, proba_gpu, w_x, w_y, entangled = False):
+	def getGPUSourceModule(self, sizeX, sizeY):
 		func_mod_template = Template("""
 
 			// Macro for converting subscripts to linear index:
@@ -465,6 +486,7 @@ class Tree:
 				unsigned int isLeaf;
 				float threshold;
 				unsigned int idChildLeft, idChildRight;
+				unsigned int depth;
 				unsigned int type;
 				int c1,xm1,xM1,ym1,yM1;
 				int c2,xm2,xM2,ym2,yM2;
@@ -493,7 +515,7 @@ class Tree:
 				return a - b - c + d;
 			}
 
-		__global__ void apply_tree(float *X, unsigned int *idTab, Node *nodeTab)
+		__global__ void apply_tree(float *X, unsigned int *idTab, Node *nodeTab, unsigned int max_depth = 0)
 			{
 				// Obtain the linear index corresponding to the current thread:
 				unsigned int idx = blockIdx.x*${n_threads_x}+threadIdx.x;
@@ -503,7 +525,7 @@ class Tree:
 				{
 					unsigned int node_id = idTab[INDEX2D(idx,idy)] ;
 					Node n = nodeTab[node_id];
-					while(!n.isLeaf) //we are in a split node
+					while(!n.isLeaf or (max_depth > 0 and n.depth <= max_depth)) //we are in a split node
 					{
 						float r = 0;
 						if(n.type == 0) // ONE
@@ -543,9 +565,22 @@ class Tree:
 						probaTab[INDEX3D(c,idx,idy)] += n.proba[c];
 				}
 			}
+		__global__ void concat_proba(float *X, unsigned int *idTab, Node *nodeTab, unsigned int shift)
+			{
+				// Obtain the linear index corresponding to the current thread:
+				unsigned int idx = blockIdx.x*${n_threads_x}+threadIdx.x;
+				unsigned int idy = blockIdx.y*${n_threads_y}+threadIdx.y;
+
+				if(idx < ${sizeX} && idy < ${sizeY})
+				{
+					Node n = nodeTab[idTab[INDEX2D(idx,idy)]];
+					for(unsigned int c = 0; c < ${n_classes}; c++)
+						X[INDEX3D(c+shift,idx,idy)] = n.proba[c];
+				}
+			}
 			""")
 
-		nbChannels, sizeX, sizeY = x_gpu.shape
+		
 
 		max_threads_per_block = pycuda.autoinit.device.MAX_THREADS_PER_BLOCK
 		max_threads = int(math.sqrt(max_threads_per_block))
@@ -565,22 +600,53 @@ class Tree:
 						sizeX=sizeX, sizeY=sizeY,
 						n_classes = self.n_classes)
 					)
+		return func_mod,block_dim,grid_dim
+
+	def predict_image(self, x_gpu, proba_gpu, w_x, w_y, intermediate = False, entangled=None):
+
+		nbChannels, sizeX, sizeY = x_gpu.shape
+		func_mod,block_dim,grid_dim = self.getGPUSourceModule(sizeX, sizeY)
 
 		apply_tree = func_mod.get_function('apply_tree')
 		add_proba = func_mod.get_function('add_proba')
+		concat_proba = func_mod.get_function('concat_proba')
 
 		#Copy data to GPU
-		tree_gpu = Tree_GPU(self,entangled)
-		id = numpy.zeros(sizeX*sizeY).reshape(sizeX,sizeY).astype(numpy.uint32)
+		tree_gpu = Tree_GPU(self,intermediate=intermediate)
+		
+		id_gpu = gpuarray.zeros((sizeX,sizeY),numpy.uint32)
+		
+		if entangled is None:
+			print("Normal")
+			#Find the leaf of each samples
+			apply_tree(x_gpu, id_gpu, tree_gpu.ptr, block=block_dim, grid=grid_dim)
+			#Add Node's proba to global proba array
+			add_proba(proba_gpu, id_gpu, tree_gpu.ptr, block=block_dim, grid=grid_dim)
+		else:
+			print("Entangled")
+			X = x_gpu.get()
+			for index,depth_level in enumerate(entangled):
+				print("depth_level",depth_level)
 
-		id_gpu = gpuarray.to_gpu(id)
+				if(depth_level < self.max_depth):
+				
+					#Find the leaf of each samples until depth
+					apply_tree(x_gpu, id_gpu, tree_gpu.ptr, numpy.uint32(depth_level), block=block_dim, grid=grid_dim)
+					#Add intermediate proba at the end of X
+					tmp = numpy.zeros((self.n_classes, sizeX, sizeY))
+					tmp_gpu = gpuarray.to_gpu(tmp.astype(numpy.float32))
+					add_proba(tmp_gpu, id_gpu, tree_gpu.ptr, block=block_dim, grid=grid_dim)
+					tmp = tmp_gpu.get()
+					p = tmp.shape[0]
+					X = numpy.concatenate((X[:-p,:,:],tmp.cumsum(2).cumsum(1)))
+					x_gpu = gpuarray.to_gpu(X)
+					#TODO cumsum on proba !!
+					#concat_proba(x_gpu, id_gpu, tree_gpu.ptr, numpy.uint32(nbChannels) , block=block_dim, grid=grid_dim)
 
-		#Find the leaf of each samples
-		apply_tree(x_gpu, id_gpu, tree_gpu.ptr, block=block_dim, grid=grid_dim)
-
-
-		#Add Node's proba to global proba array
-		add_proba(proba_gpu, id_gpu, tree_gpu.ptr, block=block_dim, grid=grid_dim)
+			#Add Node's proba to global proba array
+			add_proba(proba_gpu, id_gpu, tree_gpu.ptr, block=block_dim, grid=grid_dim)
+					
+					
 
 	def getFeatureImportance(self, acc = None):
 		if(acc == None):

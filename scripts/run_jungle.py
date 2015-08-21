@@ -63,7 +63,7 @@ def main(argv):
 
 	parser = argparse.ArgumentParser(description="Run Jungle Random Forest.")
 
-	parser.add_argument('-i', '--images', help='input images list', type=str, nargs='+', default="")
+	parser.add_argument('-i', '--images', help='input images list', type=str, nargs='+')
 	parser.add_argument('-l', '--labels', help='input labels list', type=str, nargs='+', default="")
 	parser.add_argument('-nd', '--no_data', help='no data value for label (default is 0)', type=int, default=0)
 	parser.add_argument('-ds', '--downscale', help='downscaling factor for label search (default is 1)', type=int, default=1)
@@ -74,13 +74,14 @@ def main(argv):
 	parser.add_argument('-p', '--predict', help='do predict', action='store_true', default=False)
 	parser.add_argument('-pp', '--predict_proba', help='do predict proba', action='store_true', default=False)
 
-	parser.add_argument('-ns', '--nb_samples', help='nb_samples (default is 500)', type=int, default=500)
+	parser.add_argument('-ns', '--nb_samples', help='nb samples per class (default is 500)', type=int, default=500)
 	parser.add_argument('-ws', '--windows_size', help='windows_size (default is 50)', type=int, default=50)
-	parser.add_argument('-ne', '--nb_estimators', help='nb_estimators (default is 50)', type=int, default=50)
-	parser.add_argument('-mf', '--max_features', help='max_features (default is 20)', type=int, default=20)
-	parser.add_argument('-md', '--max_depth', help='max_depth (default is 5)', type=int, default=5)
-	parser.add_argument('-mss', '--min_samples_split', help='min_samples_split (default is 10)', type=int, default=10)
-	parser.add_argument('-msl', '--min_samples_leaf', help='min_samples_leaf (default is 5)', type=int, default=5)
+	parser.add_argument('-ne', '--nb_estimators', help='nb estimators (trees) (default is 50)', type=int, default=50)
+	parser.add_argument('-mf', '--max_features', help='max features tested by split (default is 20)', type=int, default=20)
+	parser.add_argument('-md', '--max_depth', help='max depth (default is 5)', type=int, default=5)
+	parser.add_argument('-mss', '--min_samples_split', help='min samples split (default is 10)', type=int, default=10)
+	parser.add_argument('-msl', '--min_samples_leaf', help='min samples leaf (default is 5)', type=int, default=5)
+	parser.add_argument('-en', '--entangled', help='entangled section depth', type=int, nargs='*')
 
 	parser.add_argument('-nf', '--nb_forests', help='nb_forests (default is 1)', type=int, default=1)
 	parser.add_argument('-nss', '--nb_steps_simple', help='steps_simple (default is 0)', type=int, default=0)
@@ -90,9 +91,11 @@ def main(argv):
 	parser.add_argument('-ug', '--use_geodesic', help='use geodesic proba (default is False)', action='store_true', default=False)
 	parser.add_argument('-fu', '--fusion', help='fusion [last, mean] (default is last)', choices=['last', 'mean'], default='last')
 
+	parser.add_argument('-ram', '--ram', help='available ram in Mo (default is 128)', type=int, default=128)
 	parser.add_argument('-pid', '--pid', help='to save pid in a file', action='store_true', default=False)
 
 	args = parser.parse_args()
+
 
 	if len(sys.argv) <= 1 :
 		parser.print_help()
@@ -100,6 +103,9 @@ def main(argv):
 
 	input_images 			= args.images
 	input_labels 			= args.labels
+	if input_images is None:
+		print("Error : no input image, at least one image is needed")
+		exit()
 
 	get_labels = True
 	if (len(input_images) != len(input_labels)):
@@ -123,12 +129,18 @@ def main(argv):
 	max_depth 				= args.max_depth
 	min_samples_split = args.min_samples_split
 	min_samples_leaf 	= args.min_samples_leaf
-
+	
+	entangled = None
+	if  args.entangled:
+		entangled = sorted(args.entangled)
+		max_depth = max(max_depth, entangled[-1])
+		print("entangled",entangled)
+	
 	n_forests 				= args.nb_forests
 	n_steps_simple		= args.nb_steps_simple
 	n_steps_proba			= args.nb_steps_proba
-	fusion 						= args.fusion # last_only, mean, weithed_mean ??, ... ?
-	specialisation 		= args.specialisation, # "none," "global" , "per_class", ... ?
+	fusion 						= args.fusion
+	specialisation 		= args.specialisation,
 	add_previous_prob = args.add_previous_prob
 	use_geodesic 			= args.use_geodesic
 
@@ -141,6 +153,10 @@ def main(argv):
 	output += "-ne-" + str(n_estimators)
 	output += "-mf-" + str(max_features)
 	output += "-md-" + str(max_depth)
+	if entangled:
+		output += "-en"
+		for en in entangled:
+			output += "-"+str(en)
 
 	if n_steps_simple and n_steps_proba :
 		output += "-sts-" + str(n_steps_simple)
@@ -188,23 +204,17 @@ def main(argv):
 	########################################################################
 	# Read data and labels
 	########################################################################
-	#TODO à virer
-	#if(n_images == 1) :
-	#	input_image = input_images[0]
-	#	input_label = input_labels[0]
-	#	print("Read Images")
-	#	print(input_image)
-	#	raster_image = gdal.Open(input_image)
-	#	print(input_label)
-	#	raster_label = gdal.Open(input_label)
-	#	nbChannels = raster_image.RasterCount
-	#TODO FIN
 
 	raster_images = []
 	nbChannels = 0
+	XSizeMax = 0
+	YSizeMax = 0
+	
 	for image in input_images:
 		raster = gdal.Open(image)
 		raster_images.append(raster)
+		XSizeMax = max(XSizeMax,raster.RasterXSize)
+		YSizeMax = max(YSizeMax,raster.RasterYSize)
 		nbChannels_tmp = raster.RasterCount
 		if nbChannels == 0:
 			nbChannels = nbChannels_tmp
@@ -213,6 +223,8 @@ def main(argv):
 				print('Inputs images have different numbers of band')
 				exit()
 
+	size_in_Mo = XSizeMax*YSizeMax*nbChannels*8/1000000
+	
 	if get_labels :
 		raster_labels = []
 		for label in input_labels:
@@ -230,7 +242,7 @@ def main(argv):
 			samplors.append(sa)
 
 	########################################################################
-	# Trainning
+	# Training
 	########################################################################
 	j = None
 	if args.train :
@@ -245,6 +257,7 @@ def main(argv):
 							max_depth = max_depth,
 							min_samples_split = min_samples_split,
 							min_samples_leaf = min_samples_leaf,
+							entangled = entangled,
 							verbose=verbose,
 							n_jobs=n_jobs,
 							featureFunction = f,
@@ -254,14 +267,14 @@ def main(argv):
 							specialisation = specialisation,
 							add_previous_prob = add_previous_prob,
 				      use_geodesic = use_geodesic,
-							fusion = fusion # last_only, mean, weithed_mean ??, ... ?
+							fusion = fusion
 							)
 
 		########################################################################
 		# Train Jungle
 		########################################################################
-		#TODO tester aussi si l'image est pas trop grosse (sinon on utiliser la 2e méthode)
-		if(n_images == 1) :
+		#Si l'image est trop grosse, on utiliser la 2e méthode
+		if(n_images == 1) and (size_in_Mo < args.ram) :
 			print("Get samples from one image")
 			samplor = samplors[0]
 			sample_index, y = samplor.getSamplesImages(n_samples,downscale)
@@ -304,6 +317,7 @@ def main(argv):
 			# Predict Jungle
 			########################################################################
 			print("Predict Jungle image ", i+1, "/", n_images)
+			#TODO predict sur grosse image ?
 			array_image = np.array(raster_images[i].ReadAsArray())
 			if args.predict :
 				out = j.predict_image(array_image,SW,SW)

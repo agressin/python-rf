@@ -230,7 +230,11 @@ class FeatureFunction:
 		#apply_feature
 		apply_feature(x_gpu, id_gpu, f_gpu, xf_gpu, block=block_dim, grid=grid_dim)
 
-		return xf_gpu.get()
+		xf = xf_gpu.get()
+		del id_gpu
+		del xf_gpu
+		del f_gpu
+		return xf
 
 	def evaluate_image(self, X, sample_index, gpu = False):
 		if(gpu):

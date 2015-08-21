@@ -24,6 +24,7 @@ class myJungleClassifier():
 					max_features = 10,
 					min_samples_leaf = 1,
 					max_leaf_nodes = -1,
+					entangled = None,
 					featureFunction = FeatureFunction(),
 					criterion = Gini(),
 					verbose=0,
@@ -57,6 +58,7 @@ class myJungleClassifier():
 				verbose,
 				bootstrap,
 				oob_score,
+				entangled,
 				n_jobs)
 		self.featureFunction = featureFunction
 		self.verbose = verbose
